@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <!-- Page palette -->
+    <color name="page_background">#FFF7F8FF</color>
+    <color name="page_background_end">#FFF3F1FF</color>
+    <color name="surface_card">#FDFDFFFF</color>
+    <color name="surface_stroke">#FFE6E8F5</color>
+    <color name="surface_stroke_focus">#FFC4C8F7</color>
+
+    <!-- Brand colors -->
+    <color name="brand_primary">#FF8B8CF8</color>
+    <color name="brand_primary_dark">#FF6E74F7</color>
+    <color name="brand_secondary">#FFA9B6FF</color>
+    <color name="brand_glow_primary">#40A0A9FF</color>
+    <color name="brand_glow_secondary">#2EC4B9FF</color>
+    <color name="brand_soft_fill">#FFEDEFFF</color>
+    <color name="brand_soft_fill_end">#FFF3EEFF</color>
+
+    <!-- Typography -->
+    <color name="text_primary">#FF1F2340</color>
+    <color name="text_secondary">#FF6D7391</color>
+    <color name="text_tertiary">#FF8C91AD</color>
+    <color name="text_hint">#FFA1A7C2</color>
+    <color name="icon_tint">#FF8187A6</color>
+    <color name="divider_tint">#FFE3E7FA</color>
+    <color name="third_button_fill">#FFFDFDFF</color>
+    <color name="third_button_stroke">#FFDCE1F8</color>
+    <color name="third_button_shadow">#1A6E74F7</color>
+    <color name="wechat_green">#FF18B566</color>
+    <color name="google_red">#FFEA4335</color>
+    <color name="google_yellow">#FFFABB05</color>
+    <color name="google_blue">#FF4285F4</color>
+    <color name="google_green">#FF34A853</color>
+
+    <!-- Captcha colors -->
+    <color name="captcha_bg_start">#FFF6F7FF</color>
+    <color name="captcha_bg_end">#FFEFF2FF</color>
+    <color name="captcha_noise_light">#FFD9DDFD</color>
+    <color name="captcha_noise_dark">#FFBCC3FA</color>
+    <color name="captcha_line_start">#FF9BA5F8</color>
+    <color name="captcha_line_end">#FF80C7D8</color>
+    <color name="captcha_text_blue">#FF4E69D8</color>
+    <color name="captcha_text_purple">#FF7354D9</color>
+    <color name="captcha_text_teal">#FF2C8EA4</color>
+    <color name="captcha_text_ink">#FF313E72</color>
+</resources>
