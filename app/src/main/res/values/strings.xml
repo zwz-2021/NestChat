@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">NestChat</string>
+    <string name="nav_chat">聊天</string>
+    <string name="nav_diary">日记</string>
+    <string name="nav_mine">我的</string>
+    <string name="title_chat">聊天</string>
+    <string name="title_diary">日记</string>
+    <string name="title_mine">我的</string>
 </resources>

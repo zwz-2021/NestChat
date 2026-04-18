@@ -22,9 +22,6 @@ import androidx.core.view.WindowInsetsCompat;
 
 import com.google.android.material.button.MaterialButton;
 
-/**
- * 找回密码页面，包含验证码倒计时、密码显隐和基础表单校验。
- */
 public class ForgetPasswordActivity extends AppCompatActivity {
 
     private static final String TAG = "ForgetPasswordActivity";
@@ -105,7 +102,8 @@ public class ForgetPasswordActivity extends AppCompatActivity {
 
         tvGoLogin.setOnClickListener(view -> {
             Log.d(TAG, "Go to login clicked");
-            startActivity(new Intent(this, LoginActivity.class));
+            // LoginActivity is already below this page in the back stack.
+            // Finish current page so the user returns to the existing login page.
             finish();
         });
     }
@@ -113,7 +111,7 @@ public class ForgetPasswordActivity extends AppCompatActivity {
     private void handleGetCode() {
         String account = etAccount.getText().toString().trim();
         if (account.isEmpty()) {
-            etAccount.setError("请输入注册时的手机号");
+            etAccount.setError("请输入账号");
             etAccount.requestFocus();
             return;
         }
@@ -173,7 +171,7 @@ public class ForgetPasswordActivity extends AppCompatActivity {
         Log.d(TAG, "Attempt reset password, account length = " + account.length());
 
         if (account.isEmpty()) {
-            etAccount.setError("请输入注册时的手机号");
+            etAccount.setError("请输入账号");
             etAccount.requestFocus();
             return;
         }
@@ -211,6 +209,8 @@ public class ForgetPasswordActivity extends AppCompatActivity {
 
         Log.i(TAG, "Reset password validation passed");
         Toast.makeText(this, "密码重置成功（演示）", Toast.LENGTH_SHORT).show();
+        // Return directly to the existing login page to avoid creating another LoginActivity.
+        finish();
     }
 
     @Override

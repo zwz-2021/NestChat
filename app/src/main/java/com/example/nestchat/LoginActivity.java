@@ -1,5 +1,6 @@
 package com.example.nestchat;
 
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -59,7 +60,6 @@ public class LoginActivity extends AppCompatActivity {
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_login);
 
-        // 初始化页面结构与交互。
         applyWindowInsets();
         initViews();
         initRegisterText();
@@ -90,9 +90,10 @@ public class LoginActivity extends AppCompatActivity {
 
     private void initRegisterText() {
         String fullText = "还没有账号？立即注册";
+        String actionText = "立即注册";
         SpannableString spannableString = new SpannableString(fullText);
-        int start = fullText.indexOf("立即注册");
-        int end = fullText.length();
+        int start = fullText.indexOf(actionText);
+        int end = start + actionText.length();
         spannableString.setSpan(
                 new ForegroundColorSpan(ContextCompat.getColor(this, R.color.brand_primary_dark)),
                 start,
@@ -108,11 +109,11 @@ public class LoginActivity extends AppCompatActivity {
         tvRefreshCaptcha.setOnClickListener(view -> refreshCaptcha());
 
         tvForgotPassword.setOnClickListener(view ->
-                Toast.makeText(this, "忘记密码功能待接入", Toast.LENGTH_SHORT).show()
+                startActivity(new Intent(this, ForgetPasswordActivity.class))
         );
 
         tvRegister.setOnClickListener(view ->
-                Toast.makeText(this, "注册功能待接入", Toast.LENGTH_SHORT).show()
+                startActivity(new Intent(this, RegisterActivity.class))
         );
 
         btnLogin.setOnClickListener(view -> handleLogin());
@@ -132,11 +133,11 @@ public class LoginActivity extends AppCompatActivity {
             Log.d(TAG, "Password visibility disabled");
         }
 
+
         etPassword.setSelection(Math.max(selectionStart, 0));
     }
 
     private void handleLogin() {
-        // 这里只做本地校验，后续你接接口时可以在这里继续扩展。
         String account = etAccount.getText().toString().trim();
         String password = etPassword.getText().toString().trim();
         String inputCaptcha = etCaptcha.getText().toString().trim().toUpperCase(Locale.ROOT);
@@ -144,7 +145,7 @@ public class LoginActivity extends AppCompatActivity {
         Log.d(TAG, "Attempt login, account length = " + account.length() + ", rememberMe = " + cbRememberMe.isChecked());
 
         if (account.isEmpty()) {
-            etAccount.setError("请输入手机号");
+            etAccount.setError("请输入账号");
             etAccount.requestFocus();
             return;
         }
@@ -172,11 +173,13 @@ public class LoginActivity extends AppCompatActivity {
         }
 
         Log.i(TAG, "Login validation passed");
-        Toast.makeText(this, "登录校验通过，等待后续接口接入", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "登录成功（演示）", Toast.LENGTH_SHORT).show();
+        startActivity(new Intent(this, MainActivity.class));
+        // Finish the login page so pressing Back will not return here after login succeeds.
+        finish();
     }
 
     private void refreshCaptcha() {
-        // 每次刷新都重新生成随机字符，并绘制成位图。
         currentCaptcha = createCaptchaText();
         ivCaptcha.setImageBitmap(createCaptchaBitmap(currentCaptcha));
         etCaptcha.setText("");
@@ -199,7 +202,6 @@ public class LoginActivity extends AppCompatActivity {
         Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
 
-        // 先画底色，再叠加噪点、干扰线和验证码字符。
         Paint backgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         backgroundPaint.setShader(new LinearGradient(
                 0, 0, width, height,

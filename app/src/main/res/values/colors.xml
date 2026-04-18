@@ -18,6 +18,32 @@
     <color name="brand_glow_secondary">#2EC4B9FF</color>
     <color name="brand_soft_fill">#FFEDEFFF</color>
     <color name="brand_soft_fill_end">#FFF3EEFF</color>
+    <color name="brand_surface_soft">#FFF5F2FF</color>
+    <color name="brand_surface_lilac">#FFEEE9FF</color>
+    <color name="chat_voice_record_fill">#FFEDE7FF</color>
+    <color name="chat_voice_record_stroke">#FF9489FF</color>
+    <color name="chat_voice_record_text">#FF6156DD</color>
+    <color name="chat_voice_cancel_fill">#FFFFEEF1</color>
+    <color name="chat_voice_cancel_stroke">#FFF0A7B8</color>
+    <color name="chat_voice_cancel_text">#FFD9567C</color>
+    <color name="chat_voice_play_left">#FFF2EEFF</color>
+    <color name="chat_voice_play_left_stroke">#FFD8CEF8</color>
+    <color name="chat_voice_play_right_start">#FF7D88FF</color>
+    <color name="chat_voice_play_right_end">#FF6A74F1</color>
+    <color name="relation_panel_start">#FFF2EDFF</color>
+    <color name="relation_panel_end">#FFE9F1FF</color>
+    <color name="relation_button_start">#FF8D86FA</color>
+    <color name="relation_button_end">#FF6E74F7</color>
+    <color name="avatar_fill">#FFF2EEFF</color>
+    <color name="partner_avatar_fill">#FFEAE8FF</color>
+    <color name="diary_overview_start">#FFE4DEFF</color>
+    <color name="diary_overview_end">#FFF1EFFF</color>
+    <color name="diary_tag_fill">#FFF2EEFF</color>
+    <color name="diary_chart_fill">#FFF4F1FF</color>
+    <color name="diary_bar_high">#FFB39AFB</color>
+    <color name="diary_bar_mid">#FFC9B8FD</color>
+    <color name="diary_bar_low">#FFDCD2FF</color>
+    <color name="diary_photo_count_fill">#99394159</color>
 
     <!-- Typography -->
     <color name="text_primary">#FF1F2340</color>

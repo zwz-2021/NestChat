@@ -1,4 +1,4 @@
-package com.example.nestchat;
+package com.example.nestchat.Util;
 
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -11,6 +11,8 @@ import android.graphics.Shader;
 
 import androidx.annotation.ColorInt;
 import androidx.core.content.ContextCompat;
+
+import com.example.nestchat.R;
 
 import java.util.Random;
 

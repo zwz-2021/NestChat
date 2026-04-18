@@ -20,13 +20,11 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.example.nestchat.Util.CaptchaUtil;
 import com.google.android.material.button.MaterialButton;
 
 import java.util.Locale;
 
-/**
- * 注册页，只保留当前界面实际使用到的交互与校验逻辑。
- */
 public class RegisterActivity extends AppCompatActivity {
 
     private static final String TAG = "RegisterActivity";
@@ -109,7 +107,8 @@ public class RegisterActivity extends AppCompatActivity {
 
         tvGoLogin.setOnClickListener(view -> {
             Log.d(TAG, "Go to login clicked");
-            startActivity(new Intent(this, LoginActivity.class));
+            // LoginActivity is already below this page in the back stack.
+            // Finish current page so the user returns to the existing login page.
             finish();
         });
 
@@ -156,7 +155,7 @@ public class RegisterActivity extends AppCompatActivity {
         Log.d(TAG, "Attempt register, account length = " + account.length());
 
         if (account.isEmpty()) {
-            etAccount.setError("请输入手机号");
+            etAccount.setError("请输入账号");
             etAccount.requestFocus();
             return;
         }
@@ -196,6 +195,8 @@ public class RegisterActivity extends AppCompatActivity {
         }
 
         Log.i(TAG, "Register validation passed");
-        Toast.makeText(this, "注册成功，进入下一步", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "注册成功（演示）", Toast.LENGTH_SHORT).show();
+        // Return directly to the existing login page to avoid creating another LoginActivity.
+        finish();
     }
 }
