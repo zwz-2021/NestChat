@@ -12,24 +12,20 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.example.nestchat.api.ApiCallback;
+import com.example.nestchat.api.ApiError;
+import com.example.nestchat.api.RelationApi;
 import com.google.android.material.button.MaterialButton;
 
 public class RelationManageActivity extends AppCompatActivity {
-
-    private static final String KEY_RELATION_STATUS = "relation_status";
-    private static final String KEY_TARGET_PHONE = "target_phone";
-
-    private static final int STATUS_NONE = 0;
-    private static final int STATUS_PENDING = 1;
-    private static final int STATUS_BOUND = 2;
 
     private EditText etTargetPhone;
     private TextView tvStatusTitle;
     private TextView tvStatusDesc;
     private TextView tvCurrentPhone;
+    private MaterialButton btnBind;
 
-    private int relationStatus = STATUS_NONE;
-    private String targetPhone = "";
+    private String currentStatus = "none";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,15 +33,10 @@ public class RelationManageActivity extends AppCompatActivity {
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_relation_manage);
 
-        if (savedInstanceState != null) {
-            relationStatus = savedInstanceState.getInt(KEY_RELATION_STATUS, STATUS_NONE);
-            targetPhone = savedInstanceState.getString(KEY_TARGET_PHONE, "");
-        }
-
         applyWindowInsets();
         initViews();
         bindEvents();
-        renderStatus();
+        loadRelation();
     }
 
     private void applyWindowInsets() {
@@ -61,16 +52,58 @@ public class RelationManageActivity extends AppCompatActivity {
         tvStatusTitle = findViewById(R.id.tvStatusTitle);
         tvStatusDesc = findViewById(R.id.tvStatusDesc);
         tvCurrentPhone = findViewById(R.id.tvCurrentPhone);
+        btnBind = findViewById(R.id.btnBind);
     }
 
     private void bindEvents() {
         ImageView ivBack = findViewById(R.id.ivBack);
-        MaterialButton btnBind = findViewById(R.id.btnBind);
 
         ivBack.setOnClickListener(v -> finish());
         btnBind.setOnClickListener(v -> sendBindRequest());
-        findViewById(R.id.itemCheckStatus).setOnClickListener(v -> checkStatus());
+        findViewById(R.id.itemCheckStatus).setOnClickListener(v -> loadRelation());
         findViewById(R.id.itemUnbind).setOnClickListener(v -> unbind());
+    }
+
+    private void loadRelation() {
+        RelationApi.Impl.getCurrentRelation(new ApiCallback<RelationApi.RelationStatusResponse>() {
+            @Override
+            public void onSuccess(RelationApi.RelationStatusResponse data) {
+                if (data == null || data.status == null) {
+                    currentStatus = "none";
+                    renderStatus(null);
+                    return;
+                }
+                currentStatus = data.status;
+                renderStatus(data);
+            }
+
+            @Override
+            public void onError(ApiError error) {
+                currentStatus = "none";
+                renderStatus(null);
+            }
+        });
+    }
+
+    private void renderStatus(RelationApi.RelationStatusResponse data) {
+        if ("bound".equals(currentStatus) && data != null) {
+            tvStatusTitle.setText("当前已建立绑定关系");
+            tvStatusDesc.setText("你们已相伴 " + data.companionDays + " 天");
+            String partner = data.partnerNickname != null ? data.partnerNickname : data.partnerPhone;
+            tvCurrentPhone.setText("绑定对象：" + (partner != null ? partner : ""));
+            return;
+        }
+
+        if ("pending".equals(currentStatus)) {
+            tvStatusTitle.setText("绑定申请已发送");
+            tvStatusDesc.setText("等待对方确认后建立关系。");
+            tvCurrentPhone.setText("绑定对象：等待中...");
+            return;
+        }
+
+        tvStatusTitle.setText("当前没有绑定关系");
+        tvStatusDesc.setText("输入对方手机号后即可发起绑定申请。");
+        tvCurrentPhone.setText("绑定对象：未设置");
     }
 
     private void sendBindRequest() {
@@ -82,63 +115,45 @@ public class RelationManageActivity extends AppCompatActivity {
             return;
         }
 
-        targetPhone = phone;
-        relationStatus = STATUS_PENDING;
-        renderStatus();
-        Toast.makeText(this, "绑定申请已发送（演示）", Toast.LENGTH_SHORT).show();
-    }
+        btnBind.setEnabled(false);
 
-    private void checkStatus() {
-        if (relationStatus == STATUS_NONE) {
-            Toast.makeText(this, "当前没有绑定关系", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        RelationApi.CreateBindRequest req = new RelationApi.CreateBindRequest();
+        req.targetPhone = phone;
 
-        if (relationStatus == STATUS_PENDING) {
-            Toast.makeText(this, "当前状态：待对方确认", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        RelationApi.Impl.createBindRequest(req, new ApiCallback<RelationApi.RelationStatusResponse>() {
+            @Override
+            public void onSuccess(RelationApi.RelationStatusResponse data) {
+                Toast.makeText(RelationManageActivity.this, "绑定申请已发送", Toast.LENGTH_SHORT).show();
+                btnBind.setEnabled(true);
+                loadRelation();
+            }
 
-        Toast.makeText(this, "当前状态：已绑定", Toast.LENGTH_SHORT).show();
+            @Override
+            public void onError(ApiError error) {
+                Toast.makeText(RelationManageActivity.this, error.message, Toast.LENGTH_SHORT).show();
+                btnBind.setEnabled(true);
+            }
+        });
     }
 
     private void unbind() {
-        if (relationStatus == STATUS_NONE) {
+        if ("none".equals(currentStatus)) {
             Toast.makeText(this, "当前没有可解除的关系", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        relationStatus = STATUS_NONE;
-        targetPhone = "";
-        etTargetPhone.setText("");
-        renderStatus();
-        Toast.makeText(this, "已解除绑定（演示）", Toast.LENGTH_SHORT).show();
-    }
+        RelationApi.Impl.unbind(new ApiCallback<RelationApi.SimpleResponse>() {
+            @Override
+            public void onSuccess(RelationApi.SimpleResponse data) {
+                Toast.makeText(RelationManageActivity.this, "已解除绑定", Toast.LENGTH_SHORT).show();
+                etTargetPhone.setText("");
+                loadRelation();
+            }
 
-    private void renderStatus() {
-        if (relationStatus == STATUS_NONE) {
-            tvStatusTitle.setText("当前没有绑定关系");
-            tvStatusDesc.setText("输入对方手机号后即可发起绑定申请。");
-            tvCurrentPhone.setText("绑定对象：未设置");
-            return;
-        }
-
-        if (relationStatus == STATUS_PENDING) {
-            tvStatusTitle.setText("绑定申请已发送");
-            tvStatusDesc.setText("等待对方确认后建立关系。");
-            tvCurrentPhone.setText("绑定对象：" + targetPhone);
-            return;
-        }
-
-        tvStatusTitle.setText("当前已建立绑定关系");
-        tvStatusDesc.setText("你们当前处于已绑定状态。");
-        tvCurrentPhone.setText("绑定对象：" + targetPhone);
-    }
-
-    @Override
-    protected void onSaveInstanceState(Bundle outState) {
-        super.onSaveInstanceState(outState);
-        outState.putInt(KEY_RELATION_STATUS, relationStatus);
-        outState.putString(KEY_TARGET_PHONE, targetPhone);
+            @Override
+            public void onError(ApiError error) {
+                Toast.makeText(RelationManageActivity.this, error.message, Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 }

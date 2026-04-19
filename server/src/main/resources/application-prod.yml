@@ -1,0 +1,24 @@
+spring:
+  datasource:
+    url: jdbc:mysql://host.docker.internal:13306/nestchat?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: host.docker.internal
+      port: 16379
+
+mybatis-plus:
+  mapper-locations: classpath*:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+nestchat:
+  jwt:
+    secret: NestChatSecretKey2026ForJwtTokenGenerationAndValidation
+    access-expire-seconds: 7200
+    refresh-expire-seconds: 604800
+  upload:
+    base-path: /app/uploads
+    base-url: http://117.72.190.135:9090/api/v1/static

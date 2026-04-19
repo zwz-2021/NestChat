@@ -1,11 +1,13 @@
 package com.example.nestchat;
 
-import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.text.InputType;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
+import android.util.Base64;
 import android.util.Log;
 import android.widget.EditText;
 import android.widget.ImageButton;
@@ -20,10 +22,10 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import com.example.nestchat.Util.CaptchaUtil;
+import com.example.nestchat.api.ApiCallback;
+import com.example.nestchat.api.ApiError;
+import com.example.nestchat.api.AuthApi;
 import com.google.android.material.button.MaterialButton;
-
-import java.util.Locale;
 
 public class RegisterActivity extends AppCompatActivity {
 
@@ -40,7 +42,7 @@ public class RegisterActivity extends AppCompatActivity {
     private TextView tvGoLogin;
     private MaterialButton btnRegister;
 
-    private String currentCaptcha = "";
+    private String currentCaptchaId = "";
     private boolean isPasswordVisible = false;
     private boolean isConfirmPasswordVisible = false;
 
@@ -86,32 +88,20 @@ public class RegisterActivity extends AppCompatActivity {
         int end = start + actionText.length();
         spannableString.setSpan(
                 new ForegroundColorSpan(ContextCompat.getColor(this, R.color.brand_primary_dark)),
-                start,
-                end,
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-        );
+                start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         tvGoLogin.setText(spannableString);
     }
 
     private void bindEvents() {
         btnTogglePassword.setOnClickListener(view ->
-                togglePasswordVisibility(etPassword, btnTogglePassword, true)
-        );
-
+                togglePasswordVisibility(etPassword, btnTogglePassword, true));
         btnToggleConfirmPassword.setOnClickListener(view ->
-                togglePasswordVisibility(etConfirmPassword, btnToggleConfirmPassword, false)
-        );
+                togglePasswordVisibility(etConfirmPassword, btnToggleConfirmPassword, false));
 
         ivCaptcha.setOnClickListener(view -> refreshCaptcha());
         tvRefreshCaptcha.setOnClickListener(view -> refreshCaptcha());
 
-        tvGoLogin.setOnClickListener(view -> {
-            Log.d(TAG, "Go to login clicked");
-            // LoginActivity is already below this page in the back stack.
-            // Finish current page so the user returns to the existing login page.
-            finish();
-        });
-
+        tvGoLogin.setOnClickListener(view -> finish());
         btnRegister.setOnClickListener(view -> handleRegister());
     }
 
@@ -121,82 +111,88 @@ public class RegisterActivity extends AppCompatActivity {
         } else {
             isConfirmPasswordVisible = !isConfirmPasswordVisible;
         }
-
         boolean visible = isMainPassword ? isPasswordVisible : isConfirmPasswordVisible;
         int selectionStart = editText.getSelectionStart();
-
         if (visible) {
             editText.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
             toggleButton.setImageResource(R.drawable.ic_visibility);
-            Log.d(TAG, "Password visibility enabled: " + (isMainPassword ? "password" : "confirm"));
         } else {
             editText.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
             toggleButton.setImageResource(R.drawable.ic_visibility_off);
-            Log.d(TAG, "Password visibility disabled: " + (isMainPassword ? "password" : "confirm"));
         }
-
         editText.setSelection(Math.max(selectionStart, 0));
     }
 
     private void refreshCaptcha() {
-        CaptchaUtil.CaptchaResult captchaResult = CaptchaUtil.createCaptcha(this);
-        currentCaptcha = captchaResult.getCode();
-        ivCaptcha.setImageBitmap(captchaResult.getBitmap());
-        etCaptcha.setText("");
-        Log.d(TAG, "Captcha refreshed: " + currentCaptcha);
+        AuthApi.Impl.getRegisterCaptcha(new ApiCallback<AuthApi.CaptchaResponse>() {
+            @Override
+            public void onSuccess(AuthApi.CaptchaResponse data) {
+                if (data != null) {
+                    currentCaptchaId = data.captchaId;
+                    showBase64Image(data.imageBase64);
+                    etCaptcha.setText("");
+                }
+            }
+
+            @Override
+            public void onError(ApiError error) {
+                Toast.makeText(RegisterActivity.this, "获取验证码失败: " + error.message, Toast.LENGTH_LONG).show();
+            }
+        });
     }
 
     private void handleRegister() {
         String account = etAccount.getText().toString().trim();
         String password = etPassword.getText().toString().trim();
         String confirmPassword = etConfirmPassword.getText().toString().trim();
-        String inputCaptcha = etCaptcha.getText().toString().trim().toUpperCase(Locale.ROOT);
+        String inputCaptcha = etCaptcha.getText().toString().trim();
 
-        Log.d(TAG, "Attempt register, account length = " + account.length());
-
-        if (account.isEmpty()) {
-            etAccount.setError("请输入账号");
-            etAccount.requestFocus();
-            return;
-        }
-
-        if (password.isEmpty()) {
-            etPassword.setError("请输入密码");
-            etPassword.requestFocus();
-            return;
-        }
-
-        if (confirmPassword.isEmpty()) {
-            etConfirmPassword.setError("请再次输入密码");
-            etConfirmPassword.requestFocus();
-            return;
-        }
-
+        if (account.isEmpty()) { etAccount.setError("请输入账号"); etAccount.requestFocus(); return; }
+        if (password.isEmpty()) { etPassword.setError("请输入密码"); etPassword.requestFocus(); return; }
+        if (confirmPassword.isEmpty()) { etConfirmPassword.setError("请再次输入密码"); etConfirmPassword.requestFocus(); return; }
         if (!password.equals(confirmPassword)) {
             etConfirmPassword.setError("两次输入的密码不一致");
             Toast.makeText(this, "两次输入的密码不一致", Toast.LENGTH_SHORT).show();
-            etConfirmPassword.requestFocus();
             return;
         }
+        if (inputCaptcha.isEmpty()) { etCaptcha.setError("请输入验证码"); etCaptcha.requestFocus(); return; }
 
-        if (inputCaptcha.isEmpty()) {
-            etCaptcha.setError("请输入验证码");
-            etCaptcha.requestFocus();
-            return;
+        btnRegister.setEnabled(false);
+        btnRegister.setText("注册中...");
+
+        AuthApi.RegisterRequest req = new AuthApi.RegisterRequest();
+        req.account = account;
+        req.password = password;
+        req.confirmPassword = confirmPassword;
+        req.captchaId = currentCaptchaId;
+        req.captchaCode = inputCaptcha;
+
+        AuthApi.Impl.register(req, new ApiCallback<AuthApi.SimpleResponse>() {
+            @Override
+            public void onSuccess(AuthApi.SimpleResponse data) {
+                Toast.makeText(RegisterActivity.this, "注册成功", Toast.LENGTH_SHORT).show();
+                finish();
+            }
+
+            @Override
+            public void onError(ApiError error) {
+                Toast.makeText(RegisterActivity.this, error.message, Toast.LENGTH_SHORT).show();
+                btnRegister.setEnabled(true);
+                btnRegister.setText("注册");
+                refreshCaptcha();
+            }
+        });
+    }
+
+    private void showBase64Image(String base64) {
+        try {
+            String pure = base64;
+            if (pure.contains(",")) pure = pure.substring(pure.indexOf(",") + 1);
+            byte[] bytes = Base64.decode(pure, Base64.DEFAULT);
+            Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+            ivCaptcha.setImageBitmap(bitmap);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to decode captcha image", e);
         }
-
-        if (!inputCaptcha.equals(currentCaptcha)) {
-            etCaptcha.setError("验证码错误");
-            Toast.makeText(this, "验证码错误", Toast.LENGTH_SHORT).show();
-            etCaptcha.requestFocus();
-            etCaptcha.selectAll();
-            refreshCaptcha();
-            return;
-        }
-
-        Log.i(TAG, "Register validation passed");
-        Toast.makeText(this, "注册成功（演示）", Toast.LENGTH_SHORT).show();
-        // Return directly to the existing login page to avoid creating another LoginActivity.
-        finish();
     }
 }

@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  nestchat-server:
+    build: .
+    container_name: nestchat-server
+    ports:
+      - "9090:9090"
+    volumes:
+      - nestchat-uploads:/app/uploads
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+volumes:
+  nestchat-uploads:

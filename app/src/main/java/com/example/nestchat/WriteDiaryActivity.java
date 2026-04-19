@@ -1,8 +1,10 @@
 package com.example.nestchat;
 
 import android.content.Intent;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.OpenableColumns;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
@@ -20,8 +22,15 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.example.nestchat.api.ApiCallback;
+import com.example.nestchat.api.ApiError;
+import com.example.nestchat.api.DiaryApi;
+import com.example.nestchat.api.FileApi;
 import com.google.android.material.button.MaterialButton;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -31,6 +40,7 @@ import java.util.Locale;
 public class WriteDiaryActivity extends AppCompatActivity {
 
     private static final String STATE_MOOD_LABEL = "state_mood_label";
+    private static final String STATE_MOOD_CODE = "state_mood_code";
     private static final String STATE_MOOD_EMOJI = "state_mood_emoji";
     private static final String STATE_IMAGE_URIS = "state_image_uris";
     private static final String STATE_CONTENT = "state_content";
@@ -47,8 +57,10 @@ public class WriteDiaryActivity extends AppCompatActivity {
     private TextView btnMoodTired;
     private LinearLayout layoutSelectedPhotos;
     private MaterialButton btnTogglePhoto;
+    private MaterialButton btnSave;
 
     private String selectedMoodLabel = "开心";
+    private String selectedMoodCode = "happy";
     private String selectedMoodEmoji = "🙂";
     private String currentDate;
     private final ArrayList<String> selectedImageUris = new ArrayList<>();
@@ -102,6 +114,7 @@ public class WriteDiaryActivity extends AppCompatActivity {
         btnMoodTired = findViewById(R.id.btnMoodTired);
         layoutSelectedPhotos = findViewById(R.id.layoutSelectedPhotos);
         btnTogglePhoto = findViewById(R.id.btnTogglePhoto);
+        btnSave = findViewById(R.id.btnSaveDiary);
     }
 
     private void restoreState(Bundle savedInstanceState) {
@@ -113,6 +126,7 @@ public class WriteDiaryActivity extends AppCompatActivity {
 
         currentDate = savedInstanceState.getString(DiaryDetailActivity.EXTRA_DATE, currentDate);
         selectedMoodLabel = savedInstanceState.getString(STATE_MOOD_LABEL, selectedMoodLabel);
+        selectedMoodCode = savedInstanceState.getString(STATE_MOOD_CODE, selectedMoodCode);
         selectedMoodEmoji = savedInstanceState.getString(STATE_MOOD_EMOJI, selectedMoodEmoji);
         etDiaryContent.setText(savedInstanceState.getString(STATE_CONTENT, ""));
 
@@ -125,12 +139,11 @@ public class WriteDiaryActivity extends AppCompatActivity {
 
     private void bindEvents() {
         ImageView ivBack = findViewById(R.id.ivBack);
-        MaterialButton btnSave = findViewById(R.id.btnSaveDiary);
 
         ivBack.setOnClickListener(v -> finish());
-        btnMoodHappy.setOnClickListener(v -> updateMoodSelection("开心", "🙂"));
-        btnMoodSad.setOnClickListener(v -> updateMoodSelection("难过", "😢"));
-        btnMoodTired.setOnClickListener(v -> updateMoodSelection("疲惫", "😣"));
+        btnMoodHappy.setOnClickListener(v -> updateMoodSelection("开心", "happy", "🙂"));
+        btnMoodSad.setOnClickListener(v -> updateMoodSelection("难过", "sad", "😢"));
+        btnMoodTired.setOnClickListener(v -> updateMoodSelection("疲惫", "tired", "😣"));
         btnTogglePhoto.setOnClickListener(v -> handlePhotoAction());
         btnSave.setOnClickListener(v -> saveDiary());
     }
@@ -138,12 +151,13 @@ public class WriteDiaryActivity extends AppCompatActivity {
     private void renderDraftState() {
         tvCurrentDate.setText(currentDate);
         tvCurrentAuthor.setText(DEFAULT_AUTHOR);
-        updateMoodSelection(selectedMoodLabel, selectedMoodEmoji);
+        updateMoodSelection(selectedMoodLabel, selectedMoodCode, selectedMoodEmoji);
         updateImageViews();
     }
 
-    private void updateMoodSelection(String moodLabel, String moodEmoji) {
+    private void updateMoodSelection(String moodLabel, String moodCode, String moodEmoji) {
         selectedMoodLabel = moodLabel;
+        selectedMoodCode = moodCode;
         selectedMoodEmoji = moodEmoji;
 
         btnMoodHappy.setSelected("开心".equals(moodLabel));
@@ -205,20 +219,104 @@ public class WriteDiaryActivity extends AppCompatActivity {
             return;
         }
 
-        Intent resultIntent = new Intent();
-        resultIntent.putExtra(DiaryDetailActivity.EXTRA_DATE, currentDate);
-        resultIntent.putExtra(DiaryDetailActivity.EXTRA_AUTHOR, DEFAULT_AUTHOR);
-        resultIntent.putExtra(DiaryDetailActivity.EXTRA_MOOD, selectedMoodLabel + " " + selectedMoodEmoji);
-        resultIntent.putExtra(DiaryDetailActivity.EXTRA_CONTENT, content);
-        resultIntent.putExtra(DiaryDetailActivity.EXTRA_IMAGE_COUNT, selectedImageUris.size() + " 张图片");
-        resultIntent.putExtra(DiaryDetailActivity.EXTRA_IMAGE_URI,
-                selectedImageUris.isEmpty() ? "" : selectedImageUris.get(0));
-        resultIntent.putStringArrayListExtra(DiaryDetailActivity.EXTRA_IMAGE_URIS,
-                new ArrayList<>(selectedImageUris));
-        setResult(RESULT_OK, resultIntent);
+        btnSave.setEnabled(false);
+        btnSave.setText("保存中...");
 
-        Toast.makeText(this, "日记已保存（演示）", Toast.LENGTH_SHORT).show();
-        finish();
+        if (selectedImageUris.isEmpty()) {
+            createDiary(content, new ArrayList<>());
+        } else {
+            uploadImagesAndCreateDiary(content);
+        }
+    }
+
+    private void uploadImagesAndCreateDiary(String content) {
+        List<String> fileIds = new ArrayList<>();
+        uploadNextImage(content, fileIds, 0);
+    }
+
+    private void uploadNextImage(String content, List<String> fileIds, int index) {
+        if (index >= selectedImageUris.size()) {
+            createDiary(content, fileIds);
+            return;
+        }
+
+        String uriString = selectedImageUris.get(index);
+        File tempFile = copyUriToTempFile(Uri.parse(uriString));
+        if (tempFile == null) {
+            Toast.makeText(this, "图片读取失败", Toast.LENGTH_SHORT).show();
+            btnSave.setEnabled(true);
+            btnSave.setText("保存日记");
+            return;
+        }
+
+        FileApi.UploadFileRequest req = new FileApi.UploadFileRequest();
+        req.localPath = tempFile.getAbsolutePath();
+        req.mimeType = "image/jpeg";
+        req.bizType = "diary";
+
+        FileApi.Impl.uploadImage(req, new ApiCallback<FileApi.UploadFileResponse>() {
+            @Override
+            public void onSuccess(FileApi.UploadFileResponse data) {
+                tempFile.delete();
+                if (data != null && data.fileId != null) {
+                    fileIds.add(data.fileId);
+                }
+                uploadNextImage(content, fileIds, index + 1);
+            }
+
+            @Override
+            public void onError(ApiError error) {
+                tempFile.delete();
+                Toast.makeText(WriteDiaryActivity.this, "图片上传失败: " + error.message, Toast.LENGTH_SHORT).show();
+                btnSave.setEnabled(true);
+                btnSave.setText("保存日记");
+            }
+        });
+    }
+
+    private void createDiary(String content, List<String> imageFileIds) {
+        DiaryApi.CreateDiaryRequest req = new DiaryApi.CreateDiaryRequest();
+        req.authorType = "self";
+        req.date = currentDate.replace(".", "-");
+        req.moodCode = selectedMoodCode;
+        req.moodText = selectedMoodLabel;
+        req.content = content;
+        req.imageFileIds = imageFileIds;
+
+        DiaryApi.Impl.createDiary(req, new ApiCallback<DiaryApi.DiaryDetailResponse>() {
+            @Override
+            public void onSuccess(DiaryApi.DiaryDetailResponse data) {
+                Toast.makeText(WriteDiaryActivity.this, "日记已保存", Toast.LENGTH_SHORT).show();
+                setResult(RESULT_OK);
+                finish();
+            }
+
+            @Override
+            public void onError(ApiError error) {
+                Toast.makeText(WriteDiaryActivity.this, error.message, Toast.LENGTH_SHORT).show();
+                btnSave.setEnabled(true);
+                btnSave.setText("保存日记");
+            }
+        });
+    }
+
+    private File copyUriToTempFile(Uri uri) {
+        try {
+            InputStream in = getContentResolver().openInputStream(uri);
+            if (in == null) return null;
+            File temp = new File(getCacheDir(), "upload_" + System.currentTimeMillis() + ".jpg");
+            FileOutputStream out = new FileOutputStream(temp);
+            byte[] buf = new byte[8192];
+            int len;
+            while ((len = in.read(buf)) > 0) {
+                out.write(buf, 0, len);
+            }
+            in.close();
+            out.close();
+            return temp;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private String getTodayDate() {
@@ -238,6 +336,7 @@ public class WriteDiaryActivity extends AppCompatActivity {
         super.onSaveInstanceState(outState);
         outState.putString(DiaryDetailActivity.EXTRA_DATE, currentDate);
         outState.putString(STATE_MOOD_LABEL, selectedMoodLabel);
+        outState.putString(STATE_MOOD_CODE, selectedMoodCode);
         outState.putString(STATE_MOOD_EMOJI, selectedMoodEmoji);
         outState.putString(STATE_CONTENT, etDiaryContent.getText().toString());
         outState.putStringArrayList(STATE_IMAGE_URIS, new ArrayList<>(selectedImageUris));

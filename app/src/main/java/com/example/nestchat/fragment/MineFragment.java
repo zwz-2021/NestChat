@@ -7,6 +7,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -16,6 +17,9 @@ import com.example.nestchat.AccountSecurityActivity;
 import com.example.nestchat.EditProfileActivity;
 import com.example.nestchat.R;
 import com.example.nestchat.RelationManageActivity;
+import com.example.nestchat.api.ApiCallback;
+import com.example.nestchat.api.ApiError;
+import com.example.nestchat.api.UserApi;
 import com.google.android.material.button.MaterialButton;
 
 public class MineFragment extends Fragment {
@@ -25,6 +29,9 @@ public class MineFragment extends Fragment {
     private MaterialButton btnMoodTired;
     private TextView tvMood;
     private TextView tvMoodEmoji;
+    private TextView tvNickname;
+
+    private String currentMoodCode = "happy";
 
     public MineFragment() {
         // Required empty public constructor.
@@ -45,9 +52,49 @@ public class MineFragment extends Fragment {
         btnMoodHappy = view.findViewById(R.id.btnMoodHappy);
         btnMoodSad = view.findViewById(R.id.btnMoodSad);
         btnMoodTired = view.findViewById(R.id.btnMoodTired);
+        tvNickname = view.findViewById(R.id.tvNickname);
 
         bindClicks(view);
-        updateMoodSelection(btnMoodHappy, "开心");
+        loadProfile();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        loadProfile();
+    }
+
+    private void loadProfile() {
+        UserApi.Impl.getMineProfile(new ApiCallback<UserApi.ProfileResponse>() {
+            @Override
+            public void onSuccess(UserApi.ProfileResponse data) {
+                if (data == null || !isAdded()) return;
+                if (tvNickname != null) tvNickname.setText(data.nickname != null ? data.nickname : "");
+                if (data.moodCode != null) {
+                    currentMoodCode = data.moodCode;
+                    applyMoodUi(data.moodCode, data.moodText);
+                }
+            }
+
+            @Override
+            public void onError(ApiError error) {
+                // silently fail on profile load
+            }
+        });
+    }
+
+    private void applyMoodUi(String moodCode, String moodText) {
+        switch (moodCode) {
+            case "sad":
+                updateMoodSelectionUi(btnMoodSad, moodText != null ? moodText : "难过");
+                break;
+            case "tired":
+                updateMoodSelectionUi(btnMoodTired, moodText != null ? moodText : "疲惫");
+                break;
+            default:
+                updateMoodSelectionUi(btnMoodHappy, moodText != null ? moodText : "开心");
+                break;
+        }
     }
 
     private void bindClicks(View view) {
@@ -69,12 +116,33 @@ public class MineFragment extends Fragment {
                 startActivity(new Intent(requireContext(), AccountSecurityActivity.class))
         );
 
-        btnMoodHappy.setOnClickListener(v -> updateMoodSelection(btnMoodHappy, "开心"));
-        btnMoodSad.setOnClickListener(v -> updateMoodSelection(btnMoodSad, "难过"));
-        btnMoodTired.setOnClickListener(v -> updateMoodSelection(btnMoodTired, "疲惫"));
+        btnMoodHappy.setOnClickListener(v -> updateMoodOnServer("happy"));
+        btnMoodSad.setOnClickListener(v -> updateMoodOnServer("sad"));
+        btnMoodTired.setOnClickListener(v -> updateMoodOnServer("tired"));
     }
 
-    private void updateMoodSelection(MaterialButton selectedButton, String moodText) {
+    private void updateMoodOnServer(String moodCode) {
+        UserApi.UpdateMoodRequest req = new UserApi.UpdateMoodRequest();
+        req.moodCode = moodCode;
+
+        UserApi.Impl.updateMood(req, new ApiCallback<UserApi.ProfileResponse>() {
+            @Override
+            public void onSuccess(UserApi.ProfileResponse data) {
+                if (data == null || !isAdded()) return;
+                currentMoodCode = moodCode;
+                applyMoodUi(data.moodCode, data.moodText);
+            }
+
+            @Override
+            public void onError(ApiError error) {
+                if (isAdded()) {
+                    Toast.makeText(requireContext(), error.message, Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+    }
+
+    private void updateMoodSelectionUi(MaterialButton selectedButton, String moodText) {
         btnMoodHappy.setSelected(false);
         btnMoodSad.setSelected(false);
         btnMoodTired.setSelected(false);

@@ -11,6 +11,7 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -21,38 +22,29 @@ import androidx.fragment.app.Fragment;
 import com.example.nestchat.DiaryDetailActivity;
 import com.example.nestchat.R;
 import com.example.nestchat.WriteDiaryActivity;
+import com.example.nestchat.api.ApiCallback;
+import com.example.nestchat.api.ApiClient;
+import com.example.nestchat.api.ApiError;
+import com.example.nestchat.api.DiaryApi;
 
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
-import java.util.Locale;
+import java.util.List;
 
 public class DiaryFragment extends Fragment {
-
-    private static final String STATE_MINE_ENTRIES = "state_mine_entries";
-
-    private static final String TA_DATE = "2026.04.17";
-    private static final String TA_AUTHOR = "TA";
-    private static final String TA_MOOD = "难过 😢";
-    private static final String TA_CONTENT =
-            "今天心情不太好，感觉有些疲惫。希望明天会轻一点，也希望能早点收到你的消息。";
-    private static final String TA_IMAGE_COUNT = "1 张图片";
 
     private TextView tvTodayStatus;
     private TextView tvWeeklyCount;
     private TextView tvDiaryHint;
     private LinearLayout layoutMineDiaryList;
-    private final ArrayList<DiaryEntry> mineEntries = new ArrayList<>();
+    private View itemDiaryTa;
+
+    private final List<DiaryApi.DiarySummary> diaryItems = new ArrayList<>();
 
     private final ActivityResultLauncher<Intent> writeDiaryLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
-                if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null) {
-                    return;
+                if (result.getResultCode() == Activity.RESULT_OK) {
+                    loadDiaryList();
                 }
-
-                DiaryEntry newEntry = DiaryEntry.fromIntent(result.getData());
-                mineEntries.add(0, newEntry);
-                renderDiaryData();
             });
 
     public DiaryFragment() {
@@ -68,30 +60,15 @@ public class DiaryFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        restoreState(savedInstanceState);
         initViews(view);
         bindClicks(view);
-        renderDiaryData();
+        loadDiaryList();
     }
 
-    private void restoreState(Bundle savedInstanceState) {
-        mineEntries.clear();
-
-        if (savedInstanceState == null) {
-            mineEntries.add(createDefaultMineEntry());
-            return;
-        }
-
-        ArrayList<Bundle> savedEntries =
-                savedInstanceState.getParcelableArrayList(STATE_MINE_ENTRIES);
-        if (savedEntries == null || savedEntries.isEmpty()) {
-            mineEntries.add(createDefaultMineEntry());
-            return;
-        }
-
-        for (Bundle bundle : savedEntries) {
-            mineEntries.add(DiaryEntry.fromBundle(bundle));
-        }
+    @Override
+    public void onResume() {
+        super.onResume();
+        loadDiaryList();
     }
 
     private void initViews(View view) {
@@ -99,67 +76,65 @@ public class DiaryFragment extends Fragment {
         tvWeeklyCount = view.findViewById(R.id.tvWeeklyCount);
         tvDiaryHint = view.findViewById(R.id.tvDiaryHint);
         layoutMineDiaryList = view.findViewById(R.id.layoutMineDiaryList);
+        itemDiaryTa = view.findViewById(R.id.itemDiaryTa);
     }
 
     private void bindClicks(View view) {
-        view.findViewById(R.id.itemDiaryTa).setOnClickListener(v ->
-                openDiaryDetail(
-                        TA_DATE,
-                        TA_AUTHOR,
-                        TA_MOOD,
-                        TA_CONTENT,
-                        TA_IMAGE_COUNT,
-                        "",
-                        new ArrayList<>()
-                ));
+        itemDiaryTa.setOnClickListener(v -> {
+            // TA的日记区域 — 暂时不做特殊处理
+        });
 
         view.findViewById(R.id.fabWriteDiary).setOnClickListener(v ->
                 writeDiaryLauncher.launch(new Intent(requireContext(), WriteDiaryActivity.class)));
     }
 
-    private void renderDiaryData() {
-        renderOverview();
-        renderMineDiaryList();
+    private void loadDiaryList() {
+        DiaryApi.Impl.getDiaryList(1, 20, new ApiCallback<DiaryApi.DiaryListResponse>() {
+            @Override
+            public void onSuccess(DiaryApi.DiaryListResponse data) {
+                if (!isAdded()) return;
+                diaryItems.clear();
+                if (data != null && data.items != null) {
+                    diaryItems.addAll(data.items);
+                }
+                renderDiaryData();
+            }
+
+            @Override
+            public void onError(ApiError error) {
+                if (isAdded()) {
+                    Toast.makeText(requireContext(), "加载日记失败: " + error.message, Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
     }
 
-    private void renderOverview() {
-        int todayRecordCount = countTodayRecords();
-        int weeklyRecordCount = mineEntries.size() + 1;
-
-        if (todayRecordCount > 0) {
-            tvTodayStatus.setText("今天已记录 " + todayRecordCount + " 次");
-            tvDiaryHint.setText("刚刚保存的日记已经同步到列表中");
+    private void renderDiaryData() {
+        int count = diaryItems.size();
+        if (count > 0) {
+            tvTodayStatus.setText("共记录 " + count + " 篇日记");
+            tvDiaryHint.setText("点击查看日记详情");
         } else {
             tvTodayStatus.setText("今天还没有写下你们的故事");
             tvDiaryHint.setText("把今天的心情和想说的话轻轻写下来");
         }
+        tvWeeklyCount.setText("共 " + count + " 篇");
 
-        tvWeeklyCount.setText("本周已记录 " + weeklyRecordCount + " 次");
-    }
-
-    private int countTodayRecords() {
-        String today = new SimpleDateFormat("yyyy.MM.dd", Locale.getDefault()).format(new Date());
-        int count = 0;
-        for (DiaryEntry entry : mineEntries) {
-            if (today.equals(entry.date)) {
-                count++;
-            }
-        }
-        return count;
+        renderMineDiaryList();
     }
 
     private void renderMineDiaryList() {
         layoutMineDiaryList.removeAllViews();
         LayoutInflater inflater = LayoutInflater.from(requireContext());
 
-        for (DiaryEntry entry : mineEntries) {
+        for (DiaryApi.DiarySummary item : diaryItems) {
             View itemView = inflater.inflate(R.layout.item_diary_entry, layoutMineDiaryList, false);
-            bindDiaryItem(itemView, entry);
+            bindDiaryItem(itemView, item);
             layoutMineDiaryList.addView(itemView);
         }
     }
 
-    private void bindDiaryItem(View itemView, DiaryEntry entry) {
+    private void bindDiaryItem(View itemView, DiaryApi.DiarySummary item) {
         TextView tvDate = itemView.findViewById(R.id.tvDiaryItemDate);
         TextView tvAuthor = itemView.findViewById(R.id.tvDiaryItemAuthor);
         TextView tvMood = itemView.findViewById(R.id.tvDiaryItemMood);
@@ -168,133 +143,57 @@ public class DiaryFragment extends Fragment {
         View layoutImagePanel = itemView.findViewById(R.id.layoutDiaryItemImagePanel);
         ImageView ivPhoto = itemView.findViewById(R.id.ivDiaryItemPhoto);
 
-        tvDate.setText(entry.date);
-        tvAuthor.setText(entry.author);
-        tvMood.setText("心情：" + entry.mood);
-        tvContent.setText(entry.content);
-        tvImageCount.setText(entry.imageCount);
+        tvDate.setText(item.date != null ? item.date : "");
+        tvAuthor.setText("self".equals(item.authorType) ? "我" : "TA");
+        tvMood.setText("心情：" + (item.moodText != null ? item.moodText : ""));
+        tvContent.setText(item.contentSummary != null ? item.contentSummary : "");
+        tvImageCount.setText(item.imageCount + " 张图片");
 
-        if (!entry.imageUris.isEmpty()) {
+        if (item.imageCount > 0 && item.coverUrl != null && !item.coverUrl.isEmpty()) {
             layoutImagePanel.setVisibility(View.VISIBLE);
-            ivPhoto.setImageURI(Uri.parse(entry.imageUris.get(0)));
-        } else if (!TextUtils.isEmpty(entry.imageUri)) {
-            layoutImagePanel.setVisibility(View.VISIBLE);
-            ivPhoto.setImageURI(Uri.parse(entry.imageUri));
-        } else if (entry.imageCount.startsWith("0")) {
-            layoutImagePanel.setVisibility(View.GONE);
+            String fullUrl = item.coverUrl.startsWith("http") ? item.coverUrl
+                    : ApiClient.BASE_URL.replace("/api/v1", "") + item.coverUrl;
+            // For network images, we just show placeholder; full Glide integration is out of scope
             ivPhoto.setImageDrawable(null);
         } else {
-            layoutImagePanel.setVisibility(View.VISIBLE);
+            layoutImagePanel.setVisibility(item.imageCount > 0 ? View.VISIBLE : View.GONE);
             ivPhoto.setImageDrawable(null);
         }
 
-        itemView.setOnClickListener(v ->
-                openDiaryDetail(
-                        entry.date,
-                        entry.author,
-                        entry.mood,
-                        entry.content,
-                        entry.imageCount,
-                        entry.imageUri,
-                        entry.imageUris
-                ));
+        itemView.setOnClickListener(v -> openDiaryDetail(item.diaryId));
     }
 
-    private void openDiaryDetail(String date, String author, String mood, String content,
-                                 String imageCount, String imageUri, ArrayList<String> imageUris) {
-        Intent intent = new Intent(requireContext(), DiaryDetailActivity.class);
-        intent.putExtra(DiaryDetailActivity.EXTRA_DATE, date);
-        intent.putExtra(DiaryDetailActivity.EXTRA_AUTHOR, author);
-        intent.putExtra(DiaryDetailActivity.EXTRA_MOOD, mood);
-        intent.putExtra(DiaryDetailActivity.EXTRA_CONTENT, content);
-        intent.putExtra(DiaryDetailActivity.EXTRA_IMAGE_COUNT, imageCount);
-        intent.putExtra(DiaryDetailActivity.EXTRA_IMAGE_URI, imageUri == null ? "" : imageUri);
-        intent.putStringArrayListExtra(
-                DiaryDetailActivity.EXTRA_IMAGE_URIS,
-                imageUris == null ? new ArrayList<>() : new ArrayList<>(imageUris)
-        );
-        if ((imageUri != null && !imageUri.isEmpty()) || (imageUris != null && !imageUris.isEmpty())) {
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        }
-        startActivity(intent);
-    }
+    private void openDiaryDetail(String diaryId) {
+        DiaryApi.Impl.getDiaryDetail(diaryId, new ApiCallback<DiaryApi.DiaryDetailResponse>() {
+            @Override
+            public void onSuccess(DiaryApi.DiaryDetailResponse data) {
+                if (!isAdded() || data == null) return;
 
-    private DiaryEntry createDefaultMineEntry() {
-        return new DiaryEntry(
-                "2026.04.16",
-                "我",
-                "开心 🙂",
-                "今天我们聊了很久，感觉轻松了很多，想把这份平静好好记下来。",
-                "1 张图片",
-                "",
-                new ArrayList<>()
-        );
-    }
+                Intent intent = new Intent(requireContext(), DiaryDetailActivity.class);
+                intent.putExtra(DiaryDetailActivity.EXTRA_DATE, data.date);
+                intent.putExtra(DiaryDetailActivity.EXTRA_AUTHOR, "self".equals(data.authorType) ? "我" : "TA");
+                intent.putExtra(DiaryDetailActivity.EXTRA_MOOD, data.moodText != null ? data.moodText : "");
+                intent.putExtra(DiaryDetailActivity.EXTRA_CONTENT, data.content != null ? data.content : "");
 
-    @Override
-    public void onSaveInstanceState(@NonNull Bundle outState) {
-        super.onSaveInstanceState(outState);
-        ArrayList<Bundle> entryBundles = new ArrayList<>();
-        for (DiaryEntry entry : mineEntries) {
-            entryBundles.add(entry.toBundle());
-        }
-        outState.putParcelableArrayList(STATE_MINE_ENTRIES, entryBundles);
-    }
+                ArrayList<String> imageUrls = new ArrayList<>();
+                if (data.imageUrls != null) {
+                    for (String url : data.imageUrls) {
+                        String fullUrl = url.startsWith("http") ? url
+                                : ApiClient.BASE_URL.replace("/api/v1", "") + url;
+                        imageUrls.add(fullUrl);
+                    }
+                }
+                intent.putExtra(DiaryDetailActivity.EXTRA_IMAGE_COUNT, imageUrls.size() + " 张图片");
+                intent.putStringArrayListExtra(DiaryDetailActivity.EXTRA_IMAGE_URIS, imageUrls);
+                startActivity(intent);
+            }
 
-    private static class DiaryEntry {
-        final String date;
-        final String author;
-        final String mood;
-        final String content;
-        final String imageCount;
-        final String imageUri;
-        final ArrayList<String> imageUris;
-
-        DiaryEntry(String date, String author, String mood, String content,
-                   String imageCount, String imageUri, ArrayList<String> imageUris) {
-            this.date = date;
-            this.author = author;
-            this.mood = mood;
-            this.content = content;
-            this.imageCount = imageCount;
-            this.imageUri = imageUri == null ? "" : imageUri;
-            this.imageUris = imageUris == null ? new ArrayList<>() : imageUris;
-        }
-
-        Bundle toBundle() {
-            Bundle bundle = new Bundle();
-            bundle.putString(DiaryDetailActivity.EXTRA_DATE, date);
-            bundle.putString(DiaryDetailActivity.EXTRA_AUTHOR, author);
-            bundle.putString(DiaryDetailActivity.EXTRA_MOOD, mood);
-            bundle.putString(DiaryDetailActivity.EXTRA_CONTENT, content);
-            bundle.putString(DiaryDetailActivity.EXTRA_IMAGE_COUNT, imageCount);
-            bundle.putString(DiaryDetailActivity.EXTRA_IMAGE_URI, imageUri);
-            bundle.putStringArrayList(DiaryDetailActivity.EXTRA_IMAGE_URIS, imageUris);
-            return bundle;
-        }
-
-        static DiaryEntry fromBundle(Bundle bundle) {
-            return new DiaryEntry(
-                    bundle.getString(DiaryDetailActivity.EXTRA_DATE, ""),
-                    bundle.getString(DiaryDetailActivity.EXTRA_AUTHOR, "我"),
-                    bundle.getString(DiaryDetailActivity.EXTRA_MOOD, "开心 🙂"),
-                    bundle.getString(DiaryDetailActivity.EXTRA_CONTENT, ""),
-                    bundle.getString(DiaryDetailActivity.EXTRA_IMAGE_COUNT, "0 张图片"),
-                    bundle.getString(DiaryDetailActivity.EXTRA_IMAGE_URI, ""),
-                    bundle.getStringArrayList(DiaryDetailActivity.EXTRA_IMAGE_URIS)
-            );
-        }
-
-        static DiaryEntry fromIntent(Intent intent) {
-            return new DiaryEntry(
-                    intent.getStringExtra(DiaryDetailActivity.EXTRA_DATE),
-                    intent.getStringExtra(DiaryDetailActivity.EXTRA_AUTHOR),
-                    intent.getStringExtra(DiaryDetailActivity.EXTRA_MOOD),
-                    intent.getStringExtra(DiaryDetailActivity.EXTRA_CONTENT),
-                    intent.getStringExtra(DiaryDetailActivity.EXTRA_IMAGE_COUNT),
-                    intent.getStringExtra(DiaryDetailActivity.EXTRA_IMAGE_URI),
-                    intent.getStringArrayListExtra(DiaryDetailActivity.EXTRA_IMAGE_URIS)
-            );
-        }
+            @Override
+            public void onError(ApiError error) {
+                if (isAdded()) {
+                    Toast.makeText(requireContext(), error.message, Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
     }
 }

@@ -11,6 +11,7 @@ import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -36,17 +37,26 @@ import androidx.fragment.app.Fragment;
 
 import com.example.nestchat.ChatImagePreviewActivity;
 import com.example.nestchat.R;
+import com.example.nestchat.api.ApiCallback;
+import com.example.nestchat.api.ApiError;
+import com.example.nestchat.api.ChatApi;
+import com.example.nestchat.api.FileApi;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 
 public class ChatFragment extends Fragment {
 
+    private static final String TAG = "ChatFragment";
     private static final String STATE_MESSAGES = "state_messages";
     private static final String STATE_IS_VOICE_MODE = "state_is_voice_mode";
     private static final int TYPE_LEFT = 0;
@@ -80,6 +90,10 @@ public class ChatFragment extends Fragment {
     private MediaRecorder mediaRecorder;
     private MediaPlayer mediaPlayer;
 
+    private String conversationId;
+    private String nextCursor;
+    private boolean hasMore = false;
+
     private final ActivityResultLauncher<String> recordAudioPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
                 if (isGranted) {
@@ -98,8 +112,7 @@ public class ChatFragment extends Fragment {
                         uri,
                         Intent.FLAG_GRANT_READ_URI_PERMISSION
                 );
-                messages.add(ChatMessage.image(TYPE_RIGHT, getCurrentTime(), uri.toString()));
-                appendLastMessage();
+                uploadAndSendImage(uri);
             });
 
     public ChatFragment() {
@@ -117,11 +130,9 @@ public class ChatFragment extends Fragment {
         super.onViewCreated(view, savedInstanceState);
         initViews(view);
         applyWindowInsets(view);
-        restoreState(savedInstanceState);
         bindEvents(view);
-        renderMessages();
         updateInputModeUi();
-        scrollToBottom();
+        loadChatSession();
     }
 
     private void initViews(View view) {
@@ -158,23 +169,100 @@ public class ChatFragment extends Fragment {
         ViewCompat.requestApplyInsets(view.findViewById(R.id.rootChat));
     }
 
-    private void restoreState(Bundle savedInstanceState) {
-        messages.clear();
-        if (savedInstanceState == null) {
-            seedMessages();
-            return;
+    private void loadChatSession() {
+        ChatApi.Impl.getChatSession(new ApiCallback<ChatApi.ChatSessionResponse>() {
+            @Override
+            public void onSuccess(ChatApi.ChatSessionResponse data) {
+                if (!isAdded()) return;
+                if (data != null && data.conversationId != null) {
+                    conversationId = data.conversationId;
+                    loadMessages(null);
+                } else {
+                    messages.clear();
+                    messages.add(new ChatMessage(TYPE_SYSTEM, CONTENT_TEXT,
+                            "暂无聊天会话，请先绑定关系", getCurrentTime()));
+                    renderMessages();
+                }
+            }
+
+            @Override
+            public void onError(ApiError error) {
+                if (!isAdded()) return;
+                messages.clear();
+                messages.add(new ChatMessage(TYPE_SYSTEM, CONTENT_TEXT,
+                        "加载会话失败: " + error.message, getCurrentTime()));
+                renderMessages();
+            }
+        });
+    }
+
+    private void loadMessages(String cursor) {
+        if (conversationId == null) return;
+
+        ChatApi.Impl.getMessages(conversationId, cursor, 30, new ApiCallback<ChatApi.MessageListResponse>() {
+            @Override
+            public void onSuccess(ChatApi.MessageListResponse data) {
+                if (!isAdded()) return;
+                if (data == null) return;
+
+                if (cursor == null) {
+                    messages.clear();
+                }
+
+                if (data.items != null) {
+                    // Server returns newest first, we need oldest first for display
+                    List<ChatApi.MessageResponse> items = data.items;
+                    for (int i = items.size() - 1; i >= 0; i--) {
+                        messages.add(convertMessage(items.get(i)));
+                    }
+                }
+
+                nextCursor = data.nextCursor;
+                hasMore = data.hasMore;
+                renderMessages();
+                scrollToBottom();
+            }
+
+            @Override
+            public void onError(ApiError error) {
+                if (isAdded()) {
+                    Toast.makeText(requireContext(), "加载消息失败: " + error.message, Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+    }
+
+    private ChatMessage convertMessage(ChatApi.MessageResponse msg) {
+        int type;
+        if ("system".equals(msg.senderType)) {
+            type = TYPE_SYSTEM;
+        } else if ("self".equals(msg.senderType)) {
+            type = TYPE_RIGHT;
+        } else {
+            type = TYPE_LEFT;
         }
 
-        isVoiceMode = savedInstanceState.getBoolean(STATE_IS_VOICE_MODE, false);
-        ArrayList<Bundle> savedItems = savedInstanceState.getParcelableArrayList(STATE_MESSAGES);
-        if (savedItems == null || savedItems.isEmpty()) {
-            seedMessages();
-            return;
+        int contentType = CONTENT_TEXT;
+        String content = msg.content != null ? msg.content : "";
+        String imageUri = "";
+        String audioPath = "";
+        int durationSeconds = 0;
+
+        if ("image".equals(msg.messageType)) {
+            contentType = CONTENT_IMAGE;
+            imageUri = msg.imageUrl != null ? msg.imageUrl : "";
+        } else if ("voice".equals(msg.messageType)) {
+            contentType = CONTENT_VOICE;
+            audioPath = msg.voiceUrl != null ? msg.voiceUrl : "";
+            durationSeconds = msg.durationSeconds;
         }
 
-        for (Bundle bundle : savedItems) {
-            messages.add(ChatMessage.fromBundle(bundle));
+        String time = "";
+        if (msg.createdAt != null && msg.createdAt.length() >= 16) {
+            time = msg.createdAt.substring(11, 16);
         }
+
+        return new ChatMessage(type, contentType, content, time, audioPath, durationSeconds, imageUri);
     }
 
     private void bindEvents(View view) {
@@ -223,15 +311,6 @@ public class ChatFragment extends Fragment {
         }
     }
 
-    private void seedMessages() {
-        messages.add(new ChatMessage(TYPE_LEFT, CONTENT_TEXT, "嗨，你在忙什么呀？", "14:32"));
-        messages.add(new ChatMessage(TYPE_RIGHT, CONTENT_TEXT, "刚结束学习，准备放松一下～", "14:35"));
-        messages.add(new ChatMessage(TYPE_SYSTEM, CONTENT_TEXT, "今天是你们相伴的第 12 天", "14:40"));
-        messages.add(new ChatMessage(TYPE_LEFT, CONTENT_TEXT, "今天过得怎么样？", "14:41"));
-        messages.add(new ChatMessage(TYPE_RIGHT, CONTENT_TEXT, "还好，就是有点累哈哈", "14:43"));
-        messages.add(new ChatMessage(TYPE_LEFT, CONTENT_TEXT, "辛苦啦～\n记得休息一下，我在呢 🌙", "14:45"));
-    }
-
     private void toggleInputMode() {
         isVoiceMode = !isVoiceMode;
         etMessageInput.setText("");
@@ -275,10 +354,106 @@ public class ChatFragment extends Fragment {
             return;
         }
 
+        if (conversationId == null) {
+            Toast.makeText(requireContext(), "暂无聊天会话", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // Optimistic: show message immediately
         messages.add(new ChatMessage(TYPE_RIGHT, CONTENT_TEXT, content, getCurrentTime()));
         etMessageInput.setText("");
         etMessageInput.clearFocus();
         appendLastMessage();
+
+        ChatApi.SendTextMessageRequest req = new ChatApi.SendTextMessageRequest();
+        req.conversationId = conversationId;
+        req.content = content;
+        req.clientMessageId = UUID.randomUUID().toString();
+
+        ChatApi.Impl.sendTextMessage(req, new ApiCallback<ChatApi.MessageResponse>() {
+            @Override
+            public void onSuccess(ChatApi.MessageResponse data) {
+                // Message sent successfully — already shown optimistically
+            }
+
+            @Override
+            public void onError(ApiError error) {
+                if (isAdded()) {
+                    Toast.makeText(requireContext(), "发送失败: " + error.message, Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+    }
+
+    private void uploadAndSendImage(Uri uri) {
+        File tempFile = copyUriToTempFile(uri);
+        if (tempFile == null) {
+            Toast.makeText(requireContext(), "图片读取失败", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // Show optimistically
+        messages.add(ChatMessage.image(TYPE_RIGHT, getCurrentTime(), uri.toString()));
+        appendLastMessage();
+
+        FileApi.UploadFileRequest uploadReq = new FileApi.UploadFileRequest();
+        uploadReq.localPath = tempFile.getAbsolutePath();
+        uploadReq.mimeType = "image/jpeg";
+        uploadReq.bizType = "chat";
+
+        FileApi.Impl.uploadImage(uploadReq, new ApiCallback<FileApi.UploadFileResponse>() {
+            @Override
+            public void onSuccess(FileApi.UploadFileResponse data) {
+                tempFile.delete();
+                if (data == null || conversationId == null) return;
+
+                ChatApi.SendImageMessageRequest req = new ChatApi.SendImageMessageRequest();
+                req.conversationId = conversationId;
+                req.imageFileId = data.fileId;
+                req.clientMessageId = UUID.randomUUID().toString();
+
+                ChatApi.Impl.sendImageMessage(req, new ApiCallback<ChatApi.MessageResponse>() {
+                    @Override
+                    public void onSuccess(ChatApi.MessageResponse data) {
+                        // sent
+                    }
+
+                    @Override
+                    public void onError(ApiError error) {
+                        if (isAdded()) {
+                            Toast.makeText(requireContext(), "图片发送失败: " + error.message, Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                });
+            }
+
+            @Override
+            public void onError(ApiError error) {
+                tempFile.delete();
+                if (isAdded()) {
+                    Toast.makeText(requireContext(), "图片上传失败: " + error.message, Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+    }
+
+    private File copyUriToTempFile(Uri uri) {
+        try {
+            InputStream in = requireContext().getContentResolver().openInputStream(uri);
+            if (in == null) return null;
+            File temp = new File(requireContext().getCacheDir(), "chat_upload_" + System.currentTimeMillis() + ".jpg");
+            FileOutputStream out = new FileOutputStream(temp);
+            byte[] buf = new byte[8192];
+            int len;
+            while ((len = in.read(buf)) > 0) {
+                out.write(buf, 0, len);
+            }
+            in.close();
+            out.close();
+            return temp;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private void startVoiceRecording(float rawY) {
@@ -373,9 +548,58 @@ public class ChatFragment extends Fragment {
         }
 
         int durationSeconds = Math.max(1, (int) Math.round(durationMs / 1000f));
-        messages.add(ChatMessage.voice(TYPE_RIGHT, getCurrentTime(), currentRecordingPath, durationSeconds));
+        String voicePath = currentRecordingPath;
         currentRecordingPath = null;
+
+        // Show optimistically
+        messages.add(ChatMessage.voice(TYPE_RIGHT, getCurrentTime(), voicePath, durationSeconds));
         appendLastMessage();
+
+        // Upload and send
+        uploadAndSendVoice(voicePath, durationSeconds);
+    }
+
+    private void uploadAndSendVoice(String voicePath, int durationSeconds) {
+        if (conversationId == null) return;
+
+        FileApi.UploadFileRequest uploadReq = new FileApi.UploadFileRequest();
+        uploadReq.localPath = voicePath;
+        uploadReq.mimeType = "audio/mp4";
+        uploadReq.bizType = "chat";
+
+        FileApi.Impl.uploadVoice(uploadReq, new ApiCallback<FileApi.UploadFileResponse>() {
+            @Override
+            public void onSuccess(FileApi.UploadFileResponse data) {
+                if (data == null) return;
+
+                ChatApi.SendVoiceMessageRequest req = new ChatApi.SendVoiceMessageRequest();
+                req.conversationId = conversationId;
+                req.voiceFileId = data.fileId;
+                req.durationSeconds = durationSeconds;
+                req.clientMessageId = UUID.randomUUID().toString();
+
+                ChatApi.Impl.sendVoiceMessage(req, new ApiCallback<ChatApi.MessageResponse>() {
+                    @Override
+                    public void onSuccess(ChatApi.MessageResponse data) {
+                        // sent
+                    }
+
+                    @Override
+                    public void onError(ApiError error) {
+                        if (isAdded()) {
+                            Toast.makeText(requireContext(), "语音发送失败: " + error.message, Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                });
+            }
+
+            @Override
+            public void onError(ApiError error) {
+                if (isAdded()) {
+                    Toast.makeText(requireContext(), "语音上传失败: " + error.message, Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
     }
 
     private boolean hasRecordAudioPermission() {
@@ -460,7 +684,15 @@ public class ChatFragment extends Fragment {
         } else if (message.contentType == CONTENT_IMAGE) {
             tvMessage.setVisibility(View.GONE);
             ivMessageImage.setVisibility(View.VISIBLE);
-            ivMessageImage.setImageURI(Uri.parse(message.imageUri));
+            String imgUri = message.imageUri;
+            if (imgUri != null && !imgUri.isEmpty()) {
+                if (imgUri.startsWith("content://") || imgUri.startsWith("file://")) {
+                    ivMessageImage.setImageURI(Uri.parse(imgUri));
+                } else {
+                    // Network image — just show placeholder for now
+                    ivMessageImage.setImageDrawable(null);
+                }
+            }
             ivMessageImage.setBackgroundResource(message.type == TYPE_RIGHT
                     ? R.drawable.bg_chat_image_frame_right
                     : R.drawable.bg_chat_image_frame_left);
@@ -490,7 +722,13 @@ public class ChatFragment extends Fragment {
     }
 
     private void playVoiceMessage(String audioPath) {
-        if (TextUtils.isEmpty(audioPath) || !new File(audioPath).exists()) {
+        if (TextUtils.isEmpty(audioPath)) {
+            Toast.makeText(requireContext(), "语音文件不存在", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // For local files
+        if (!audioPath.startsWith("http") && !new File(audioPath).exists()) {
             Toast.makeText(requireContext(), "语音文件不存在", Toast.LENGTH_SHORT).show();
             return;
         }

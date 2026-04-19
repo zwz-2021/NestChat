@@ -3,22 +3,16 @@ package com.example.nestchat.api;
 import java.util.List;
 
 /**
- * 关系管理接口占位。
+ * 关系管理接口。
  */
 public interface RelationApi {
 
     void getCurrentRelation(ApiCallback<RelationStatusResponse> callback);
-
     void createBindRequest(CreateBindRequest request, ApiCallback<RelationStatusResponse> callback);
-
     void getRelationApplications(ApiCallback<RelationApplicationsResponse> callback);
-
     void acceptRelation(String applicationId, ApiCallback<RelationStatusResponse> callback);
-
     void rejectRelation(String applicationId, ApiCallback<RelationStatusResponse> callback);
-
     void updateRemark(UpdateRemarkRequest request, ApiCallback<RelationStatusResponse> callback);
-
     void unbind(ApiCallback<SimpleResponse> callback);
 
     class CreateBindRequest {
@@ -59,5 +53,38 @@ public interface RelationApi {
     class SimpleResponse {
         public boolean success;
         public String message;
+    }
+
+    // ========== 实现 ==========
+    class Impl {
+        public static void getCurrentRelation(ApiCallback<RelationStatusResponse> callback) {
+            ApiClient.get("/relations/current", RelationStatusResponse.class, callback);
+        }
+
+        public static void createBindRequest(CreateBindRequest request, ApiCallback<RelationStatusResponse> callback) {
+            ApiClient.post("/relations/applications", request, RelationStatusResponse.class, callback);
+        }
+
+        public static void getRelationApplications(ApiCallback<RelationApplicationsResponse> callback) {
+            ApiClient.get("/relations/applications", RelationApplicationsResponse.class, callback);
+        }
+
+        public static void acceptRelation(String applicationId, ApiCallback<RelationStatusResponse> callback) {
+            ApiClient.post("/relations/applications/" + applicationId + "/accept", null,
+                    RelationStatusResponse.class, callback);
+        }
+
+        public static void rejectRelation(String applicationId, ApiCallback<RelationStatusResponse> callback) {
+            ApiClient.post("/relations/applications/" + applicationId + "/reject", null,
+                    RelationStatusResponse.class, callback);
+        }
+
+        public static void updateRemark(UpdateRemarkRequest request, ApiCallback<RelationStatusResponse> callback) {
+            ApiClient.put("/relations/current/remark", request, RelationStatusResponse.class, callback);
+        }
+
+        public static void unbind(ApiCallback<SimpleResponse> callback) {
+            ApiClient.delete("/relations/current", SimpleResponse.class, callback);
+        }
     }
 }
