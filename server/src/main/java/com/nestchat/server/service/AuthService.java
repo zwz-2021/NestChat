@@ -2,6 +2,7 @@ package com.nestchat.server.service;
 
 import com.nestchat.server.common.BusinessException;
 import com.nestchat.server.common.IdGenerator;
+import com.nestchat.server.common.MediaUrlHelper;
 import com.nestchat.server.common.ResultCode;
 import com.nestchat.server.dto.request.LoginRequest;
 import com.nestchat.server.dto.request.RegisterRequest;
@@ -43,14 +44,17 @@ public class AuthService {
     private final StringRedisTemplate redisTemplate;
     private final BCryptPasswordEncoder passwordEncoder;
     private final SmsService smsService;
+    private final MediaUrlHelper mediaUrlHelper;
 
     public AuthService(UserMapper userMapper, JwtUtil jwtUtil, StringRedisTemplate redisTemplate,
-                      @Autowired(required = false) SmsService smsService) {
+                      @Autowired(required = false) SmsService smsService,
+                      MediaUrlHelper mediaUrlHelper) {
         this.userMapper = userMapper;
         this.jwtUtil = jwtUtil;
         this.redisTemplate = redisTemplate;
         this.smsService = smsService;
         this.passwordEncoder = new BCryptPasswordEncoder();
+        this.mediaUrlHelper = mediaUrlHelper;
     }
 
     public CaptchaResponse generateCaptcha(String type) {
@@ -99,7 +103,7 @@ public class AuthService {
         userBrief.setUserId(user.getUserId());
         userBrief.setAccount(user.getAccount());
         userBrief.setNickname(user.getNickname());
-        userBrief.setAvatarUrl(user.getAvatarUrl());
+        userBrief.setAvatarUrl(mediaUrlHelper.toPublicUrl(user.getAvatarUrl()));
         resp.setUser(userBrief);
 
         return resp;

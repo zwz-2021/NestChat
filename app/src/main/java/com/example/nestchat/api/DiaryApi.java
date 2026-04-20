@@ -50,6 +50,9 @@ public interface DiaryApi {
         public String moodText;
         public String content;
         public List<String> imageUrls;
+        public String emotionSummary;
+        public String triggerEvent;
+        public String messageToPartner;
     }
 
     class MoodTrendResponse {

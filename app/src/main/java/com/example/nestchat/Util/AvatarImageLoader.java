@@ -11,6 +11,7 @@ import android.widget.ImageView;
 import androidx.annotation.NonNull;
 
 import com.example.nestchat.R;
+import com.example.nestchat.api.MediaUrlResolver;
 
 import java.io.IOException;
 
@@ -29,7 +30,7 @@ AvatarImageLoader {
     private AvatarImageLoader() {
     }
     public static void load(ImageView imageView, String imageUrl, int placeholderPaddingDp) {
-        String normalizedUrl = safeTrim(imageUrl);
+        String normalizedUrl = MediaUrlResolver.resolve(imageUrl);
         imageView.setTag(normalizedUrl);
         if (normalizedUrl.isEmpty()) {
             showPlaceholder(imageView, placeholderPaddingDp);
@@ -44,7 +45,7 @@ AvatarImageLoader {
     }
 
     public static void loadContent(ImageView imageView, String imageRef) {
-        String normalizedRef = safeTrim(imageRef);
+        String normalizedRef = MediaUrlResolver.resolve(imageRef);
         imageView.setTag(normalizedRef);
         if (normalizedRef.isEmpty()) {
             imageView.setImageDrawable(null);
@@ -134,7 +135,4 @@ AvatarImageLoader {
         imageView.setImageTintList(ColorStateList.valueOf(imageView.getContext().getColor(R.color.brand_primary_dark)));
     }
 
-    private static String safeTrim(String value) {
-        return value == null ? "" : value.trim();
-    }
 }

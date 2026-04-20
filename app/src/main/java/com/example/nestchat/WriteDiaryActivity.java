@@ -308,6 +308,7 @@ public class WriteDiaryActivity extends AppCompatActivity {
             public void onSuccess(DiaryApi.DiaryDetailResponse data) {
                 Toast.makeText(WriteDiaryActivity.this, "日记已保存", Toast.LENGTH_SHORT).show();
                 setResult(RESULT_OK);
+                openDiaryDetail(data);
                 finish();
             }
 
@@ -318,6 +319,31 @@ public class WriteDiaryActivity extends AppCompatActivity {
                 btnSave.setText("保存日记");
             }
         });
+    }
+
+    private void openDiaryDetail(DiaryApi.DiaryDetailResponse data) {
+        if (data == null) {
+            Toast.makeText(this, "日记已保存", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        Intent intent = new Intent(this, DiaryDetailActivity.class);
+        intent.putExtra(DiaryDetailActivity.EXTRA_DIARY_ID, data.diaryId);
+        intent.putExtra(DiaryDetailActivity.EXTRA_DATE, data.date);
+        intent.putExtra(DiaryDetailActivity.EXTRA_AUTHOR, "我");
+        intent.putExtra(DiaryDetailActivity.EXTRA_MOOD, buildMoodLabel(data.moodText));
+        intent.putExtra(DiaryDetailActivity.EXTRA_CONTENT, data.content);
+        intent.putExtra(DiaryDetailActivity.EXTRA_EMOTION_SUMMARY, data.emotionSummary);
+        intent.putExtra(DiaryDetailActivity.EXTRA_TRIGGER_EVENT, data.triggerEvent);
+        intent.putExtra(DiaryDetailActivity.EXTRA_MESSAGE_TO_PARTNER, data.messageToPartner);
+
+        ArrayList<String> imageUrls = new ArrayList<>();
+        if (data.imageUrls != null) {
+            imageUrls.addAll(data.imageUrls);
+        }
+        intent.putExtra(DiaryDetailActivity.EXTRA_IMAGE_COUNT, imageUrls.size() + " 张图片");
+        intent.putStringArrayListExtra(DiaryDetailActivity.EXTRA_IMAGE_URIS, imageUrls);
+        startActivity(intent);
     }
 
     private File copyUriToTempFile(Uri uri) {
@@ -377,6 +403,13 @@ public class WriteDiaryActivity extends AppCompatActivity {
                 value,
                 getResources().getDisplayMetrics()
         );
+    }
+
+    private String buildMoodLabel(String moodText) {
+        if (moodText == null || moodText.trim().isEmpty()) {
+            return "心情：未记录";
+        }
+        return "心情：" + moodText.trim();
     }
 
     @Override

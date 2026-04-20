@@ -12,6 +12,7 @@ public interface ChatApi {
     void sendTextMessage(SendTextMessageRequest request, ApiCallback<MessageResponse> callback);
     void sendImageMessage(SendImageMessageRequest request, ApiCallback<MessageResponse> callback);
     void sendVoiceMessage(SendVoiceMessageRequest request, ApiCallback<MessageResponse> callback);
+    void analyzeEmotionRisk(AnalyzeEmotionRiskRequest request, ApiCallback<EmotionRiskResponse> callback);
 
     class GetMessagesRequest {
         public String conversationId;
@@ -36,6 +37,10 @@ public interface ChatApi {
         public String voiceFileId;
         public int durationSeconds;
         public String clientMessageId;
+    }
+
+    class AnalyzeEmotionRiskRequest {
+        public List<String> partnerMessages;
     }
 
     class ChatSessionResponse {
@@ -71,6 +76,14 @@ public interface ChatApi {
         public String sendStatus;
     }
 
+    class EmotionRiskResponse {
+        public boolean shouldPrompt;
+        public String riskLevel;
+        public String emotionTag;
+        public String title;
+        public String message;
+    }
+
     // ========== 实现 ==========
     class Impl {
         public static void getChatSession(ApiCallback<ChatSessionResponse> callback) {
@@ -96,6 +109,13 @@ public interface ChatApi {
 
         public static void sendVoiceMessage(SendVoiceMessageRequest request, ApiCallback<MessageResponse> callback) {
             ApiClient.post("/chat/messages/voice", request, MessageResponse.class, callback);
+        }
+
+        public static void analyzeEmotionRisk(List<String> partnerMessages,
+                                              ApiCallback<EmotionRiskResponse> callback) {
+            AnalyzeEmotionRiskRequest request = new AnalyzeEmotionRiskRequest();
+            request.partnerMessages = partnerMessages;
+            ApiClient.post("/chat/risk/emotion", request, EmotionRiskResponse.class, callback);
         }
     }
 }

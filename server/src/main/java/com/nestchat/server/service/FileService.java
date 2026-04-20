@@ -2,6 +2,7 @@ package com.nestchat.server.service;
 
 import com.nestchat.server.common.BusinessException;
 import com.nestchat.server.common.IdGenerator;
+import com.nestchat.server.common.MediaUrlHelper;
 import com.nestchat.server.common.ResultCode;
 import com.nestchat.server.dto.response.UploadFileResponse;
 import com.nestchat.server.entity.FileRecord;
@@ -27,13 +28,12 @@ public class FileService {
     @Value("${nestchat.upload.base-path}")
     private String uploadBasePath;
 
-    @Value("${nestchat.upload.base-url}")
-    private String uploadBaseUrl;
-
     private final FileRecordMapper fileRecordMapper;
+    private final MediaUrlHelper mediaUrlHelper;
 
-    public FileService(FileRecordMapper fileRecordMapper) {
+    public FileService(FileRecordMapper fileRecordMapper, MediaUrlHelper mediaUrlHelper) {
         this.fileRecordMapper = fileRecordMapper;
+        this.mediaUrlHelper = mediaUrlHelper;
     }
 
     public UploadFileResponse uploadImage(MultipartFile file, String bizType, String userId) {
@@ -54,14 +54,11 @@ public class FileService {
         String thumbFullPath = buildFullPath(thumbRelativePath);
         generateThumbnail(fullPath, thumbFullPath, 200);
 
-        String fileUrl = uploadBaseUrl + "/" + relativePath;
-        String thumbnailUrl = uploadBaseUrl + "/" + thumbRelativePath;
-
         FileRecord record = new FileRecord();
         record.setFileId(fileId);
         record.setUserId(userId);
-        record.setFileUrl(fileUrl);
-        record.setThumbnailUrl(thumbnailUrl);
+        record.setFileUrl(relativePath);
+        record.setThumbnailUrl(thumbRelativePath);
         record.setMimeType(mimeType != null ? mimeType : "image/jpeg");
         record.setFileSize(file.getSize());
         record.setBizType(bizType);
@@ -71,8 +68,8 @@ public class FileService {
 
         UploadFileResponse resp = new UploadFileResponse();
         resp.setFileId(fileId);
-        resp.setFileUrl(fileUrl);
-        resp.setThumbnailUrl(thumbnailUrl);
+        resp.setFileUrl(mediaUrlHelper.toPublicUrl(relativePath));
+        resp.setThumbnailUrl(mediaUrlHelper.toPublicUrl(thumbRelativePath));
         resp.setMimeType(record.getMimeType());
         resp.setFileSize(file.getSize());
         resp.setDurationSeconds(0);
@@ -93,12 +90,10 @@ public class FileService {
         String fullPath = buildFullPath(relativePath);
         saveFile(file, fullPath);
 
-        String fileUrl = uploadBaseUrl + "/" + relativePath;
-
         FileRecord record = new FileRecord();
         record.setFileId(fileId);
         record.setUserId(userId);
-        record.setFileUrl(fileUrl);
+        record.setFileUrl(relativePath);
         record.setThumbnailUrl("");
         record.setMimeType(mimeType != null ? mimeType : "audio/mp4");
         record.setFileSize(file.getSize());
@@ -109,7 +104,7 @@ public class FileService {
 
         UploadFileResponse resp = new UploadFileResponse();
         resp.setFileId(fileId);
-        resp.setFileUrl(fileUrl);
+        resp.setFileUrl(mediaUrlHelper.toPublicUrl(relativePath));
         resp.setThumbnailUrl("");
         resp.setMimeType(record.getMimeType());
         resp.setFileSize(file.getSize());

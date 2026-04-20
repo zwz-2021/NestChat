@@ -90,8 +90,7 @@ public class DiaryFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        // Only reload if data is stale (optional optimization)
-        // loadPageData();
+        loadPageData();
     }
 
     private void initViews(View view) {
@@ -515,6 +514,9 @@ public class DiaryFragment extends Fragment {
                 intent.putExtra(DiaryDetailActivity.EXTRA_AUTHOR, "me".equals(safeTrim(data.authorType)) ? "我" : "TA");
                 intent.putExtra(DiaryDetailActivity.EXTRA_MOOD, buildMoodLabel(data.moodText));
                 intent.putExtra(DiaryDetailActivity.EXTRA_CONTENT, nonEmpty(data.content, ""));
+                intent.putExtra(DiaryDetailActivity.EXTRA_EMOTION_SUMMARY, nonEmpty(data.emotionSummary, ""));
+                intent.putExtra(DiaryDetailActivity.EXTRA_TRIGGER_EVENT, nonEmpty(data.triggerEvent, ""));
+                intent.putExtra(DiaryDetailActivity.EXTRA_MESSAGE_TO_PARTNER, nonEmpty(data.messageToPartner, ""));
 
                 ArrayList<String> imageUrls = new ArrayList<>();
                 if (data.imageUrls != null) {

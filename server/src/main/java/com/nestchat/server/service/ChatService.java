@@ -3,6 +3,7 @@ package com.nestchat.server.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.nestchat.server.common.BusinessException;
 import com.nestchat.server.common.IdGenerator;
+import com.nestchat.server.common.MediaUrlHelper;
 import com.nestchat.server.common.ResultCode;
 import com.nestchat.server.dto.request.SendImageMessageRequest;
 import com.nestchat.server.dto.request.SendTextMessageRequest;
@@ -43,16 +44,19 @@ public class ChatService {
     private final FileRecordMapper fileRecordMapper;
     private final RelationMapper relationMapper;
     private final DiaryMapper diaryMapper;
+    private final MediaUrlHelper mediaUrlHelper;
 
     public ChatService(ConversationMapper conversationMapper, MessageMapper messageMapper,
                        UserMapper userMapper, FileRecordMapper fileRecordMapper,
-                       RelationMapper relationMapper, DiaryMapper diaryMapper) {
+                       RelationMapper relationMapper, DiaryMapper diaryMapper,
+                       MediaUrlHelper mediaUrlHelper) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.userMapper = userMapper;
         this.fileRecordMapper = fileRecordMapper;
         this.relationMapper = relationMapper;
         this.diaryMapper = diaryMapper;
+        this.mediaUrlHelper = mediaUrlHelper;
     }
 
     public ChatSessionResponse getCurrentSession(String userId) {
@@ -82,7 +86,7 @@ public class ChatService {
 
         if (partner != null) {
             resp.setPartnerNickname(partner.getNickname());
-            resp.setPartnerAvatarUrl(partner.getAvatarUrl());
+            resp.setPartnerAvatarUrl(mediaUrlHelper.toPublicUrl(partner.getAvatarUrl()));
             resp.setPartnerMoodCode(partner.getMoodCode());
             resp.setPartnerMoodText(partner.getMoodText());
             if (partner.getLastActiveAt() != null) {
@@ -164,7 +168,7 @@ public class ChatService {
         msg.setSenderType("");
         msg.setMessageType("image");
         msg.setContent("");
-        msg.setImageUrl(file.getFileUrl());
+        msg.setImageUrl(mediaUrlHelper.toStoredPath(file.getFileUrl()));
         msg.setVoiceUrl("");
         msg.setDurationSeconds(0);
         msg.setClientMessageId(req.getClientMessageId() != null ? req.getClientMessageId() : "");
@@ -191,7 +195,7 @@ public class ChatService {
         msg.setMessageType("voice");
         msg.setContent("");
         msg.setImageUrl("");
-        msg.setVoiceUrl(file.getFileUrl());
+        msg.setVoiceUrl(mediaUrlHelper.toStoredPath(file.getFileUrl()));
         msg.setDurationSeconds(req.getDurationSeconds() != null ? req.getDurationSeconds() : 0);
         msg.setClientMessageId(req.getClientMessageId() != null ? req.getClientMessageId() : "");
         msg.setSendStatus("sent");
@@ -218,8 +222,8 @@ public class ChatService {
         resp.setSenderType(msg.getSenderUserId().equals(currentUserId) ? "me" : "ta");
         resp.setMessageType(msg.getMessageType());
         resp.setContent(msg.getContent());
-        resp.setImageUrl(msg.getImageUrl());
-        resp.setVoiceUrl(msg.getVoiceUrl());
+        resp.setImageUrl(mediaUrlHelper.toPublicUrl(msg.getImageUrl()));
+        resp.setVoiceUrl(mediaUrlHelper.toPublicUrl(msg.getVoiceUrl()));
         resp.setDurationSeconds(msg.getDurationSeconds());
         resp.setCreatedAt(msg.getCreatedAt().format(DT_FMT));
         resp.setClientMessageId(msg.getClientMessageId());

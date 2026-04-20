@@ -14,4 +14,7 @@ public class DiaryDetailResponse {
     private String moodText;
     private String content;
     private List<String> imageUrls;
+    private String emotionSummary;
+    private String triggerEvent;
+    private String messageToPartner;
 }

@@ -3,6 +3,7 @@ package com.nestchat.server.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.nestchat.server.common.BusinessException;
 import com.nestchat.server.common.IdGenerator;
+import com.nestchat.server.common.MediaUrlHelper;
 import com.nestchat.server.common.ResultCode;
 import com.nestchat.server.dto.request.CreateBindRequest;
 import com.nestchat.server.dto.request.UpdateRemarkRequest;
@@ -57,11 +58,12 @@ public class RelationService {
     private final MessageMapper messageMapper;
     private final DiaryMapper diaryMapper;
     private final DiaryImageMapper diaryImageMapper;
+    private final MediaUrlHelper mediaUrlHelper;
 
     public RelationService(RelationMapper relationMapper, RelationApplicationMapper applicationMapper,
                            UserMapper userMapper, ConversationMapper conversationMapper,
                            MessageMapper messageMapper, DiaryMapper diaryMapper,
-                           DiaryImageMapper diaryImageMapper) {
+                           DiaryImageMapper diaryImageMapper, MediaUrlHelper mediaUrlHelper) {
         this.relationMapper = relationMapper;
         this.applicationMapper = applicationMapper;
         this.userMapper = userMapper;
@@ -69,6 +71,7 @@ public class RelationService {
         this.messageMapper = messageMapper;
         this.diaryMapper = diaryMapper;
         this.diaryImageMapper = diaryImageMapper;
+        this.mediaUrlHelper = mediaUrlHelper;
     }
 
     public RelationStatusResponse getCurrentRelation(String userId) {
@@ -370,7 +373,7 @@ public class RelationService {
         if (partner != null) {
             resp.setPartnerPhone(partner.getAccount());
             resp.setPartnerNickname(partner.getNickname());
-            resp.setPartnerAvatarUrl(partner.getAvatarUrl());
+            resp.setPartnerAvatarUrl(mediaUrlHelper.toPublicUrl(partner.getAvatarUrl()));
         }
         if (relation.getBoundAt() != null) {
             resp.setBoundAt(formatDateTime(relation.getBoundAt()));

@@ -29,7 +29,7 @@ public class TokenManager {
                 .putString(KEY_USER_ID, userId)
                 .putString(KEY_ACCOUNT, account)
                 .putString(KEY_NICKNAME, nickname)
-                .putString(KEY_AVATAR_URL, avatarUrl)
+                .putString(KEY_AVATAR_URL, MediaUrlResolver.toPortableRef(avatarUrl))
                 .apply();
     }
 
@@ -60,7 +60,7 @@ public class TokenManager {
     public static void updateProfile(String nickname, String avatarUrl) {
         prefs.edit()
                 .putString(KEY_NICKNAME, nickname != null ? nickname : "")
-                .putString(KEY_AVATAR_URL, avatarUrl != null ? avatarUrl : "")
+                .putString(KEY_AVATAR_URL, MediaUrlResolver.toPortableRef(avatarUrl))
                 .apply();
     }
 

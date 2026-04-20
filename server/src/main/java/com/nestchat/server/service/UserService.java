@@ -1,6 +1,7 @@
 package com.nestchat.server.service;
 
 import com.nestchat.server.common.BusinessException;
+import com.nestchat.server.common.MediaUrlHelper;
 import com.nestchat.server.common.ResultCode;
 import com.nestchat.server.dto.request.UpdateMoodRequest;
 import com.nestchat.server.dto.request.UpdateProfileRequest;
@@ -27,9 +28,11 @@ public class UserService {
     );
 
     private final UserMapper userMapper;
+    private final MediaUrlHelper mediaUrlHelper;
 
-    public UserService(UserMapper userMapper) {
+    public UserService(UserMapper userMapper, MediaUrlHelper mediaUrlHelper) {
         this.userMapper = userMapper;
+        this.mediaUrlHelper = mediaUrlHelper;
     }
 
     public ProfileResponse getProfile(String userId) {
@@ -49,7 +52,7 @@ public class UserService {
             user.setNickname(req.getNickname());
         }
         if (req.getAvatarUrl() != null) {
-            user.setAvatarUrl(req.getAvatarUrl());
+            user.setAvatarUrl(mediaUrlHelper.toStoredPath(req.getAvatarUrl()));
         }
         user.setUpdatedAt(LocalDateTime.now());
         userMapper.updateById(user);
@@ -81,7 +84,7 @@ public class UserService {
         resp.setUserId(user.getUserId());
         resp.setAccount(user.getAccount());
         resp.setNickname(user.getNickname());
-        resp.setAvatarUrl(user.getAvatarUrl());
+        resp.setAvatarUrl(mediaUrlHelper.toPublicUrl(user.getAvatarUrl()));
         resp.setMoodCode(user.getMoodCode());
         resp.setMoodText(user.getMoodText());
         return resp;

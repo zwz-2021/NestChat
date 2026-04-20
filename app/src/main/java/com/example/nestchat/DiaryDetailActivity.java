@@ -33,8 +33,24 @@ public class DiaryDetailActivity extends AppCompatActivity {
     public static final String EXTRA_IMAGE_URI = "extra_image_uri";
     public static final String EXTRA_IMAGE_URIS = "extra_image_uris";
     public static final String EXTRA_DIARY_ID = "extra_diary_id";
+    public static final String EXTRA_EMOTION_SUMMARY = "extra_emotion_summary";
+    public static final String EXTRA_TRIGGER_EVENT = "extra_trigger_event";
+    public static final String EXTRA_MESSAGE_TO_PARTNER = "extra_message_to_partner";
 
     private String diaryId;
+    private TextView tvDate;
+    private TextView tvAuthor;
+    private TextView tvMood;
+    private TextView tvContent;
+    private TextView tvImageCount;
+    private TextView tvPhotoPlaceholder;
+    private TextView tvDelete;
+    private TextView tvEmotionSummary;
+    private TextView tvTriggerEvent;
+    private TextView tvMessageToPartner;
+    private View layoutPhotoPanel;
+    private View layoutDiaryInsight;
+    private LinearLayout layoutDiaryPhotos;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,6 +63,8 @@ public class DiaryDetailActivity extends AppCompatActivity {
         applyWindowInsets();
         initViews();
         bindEvents();
+        bindIntentSnapshot();
+        bindDeleteState();
     }
 
     private void applyWindowInsets() {
@@ -58,36 +76,76 @@ public class DiaryDetailActivity extends AppCompatActivity {
     }
 
     private void initViews() {
-        TextView tvDate = findViewById(R.id.tvDiaryDate);
-        TextView tvAuthor = findViewById(R.id.tvDiaryAuthor);
-        TextView tvMood = findViewById(R.id.tvDiaryMood);
-        TextView tvContent = findViewById(R.id.tvDiaryContent);
-        TextView tvImageCount = findViewById(R.id.tvImageCount);
-        View layoutPhotoPanel = findViewById(R.id.layoutPhotoPanel);
-        LinearLayout layoutDiaryPhotos = findViewById(R.id.layoutDiaryPhotos);
-        TextView tvPhotoPlaceholder = findViewById(R.id.tvPhotoPlaceholder);
-        TextView tvDelete = findViewById(R.id.tvDelete);
+        tvDate = findViewById(R.id.tvDiaryDate);
+        tvAuthor = findViewById(R.id.tvDiaryAuthor);
+        tvMood = findViewById(R.id.tvDiaryMood);
+        tvContent = findViewById(R.id.tvDiaryContent);
+        tvImageCount = findViewById(R.id.tvImageCount);
+        tvPhotoPlaceholder = findViewById(R.id.tvPhotoPlaceholder);
+        tvDelete = findViewById(R.id.tvDelete);
+        tvEmotionSummary = findViewById(R.id.tvEmotionSummary);
+        tvTriggerEvent = findViewById(R.id.tvTriggerEvent);
+        tvMessageToPartner = findViewById(R.id.tvMessageToPartner);
+        layoutPhotoPanel = findViewById(R.id.layoutPhotoPanel);
+        layoutDiaryInsight = findViewById(R.id.layoutDiaryInsight);
+        layoutDiaryPhotos = findViewById(R.id.layoutDiaryPhotos);
+    }
 
+    private void bindEvents() {
+        ImageView ivBack = findViewById(R.id.ivBack);
+        ivBack.setOnClickListener(v -> finish());
+    }
+
+    private void bindIntentSnapshot() {
         String date = getIntent().getStringExtra(EXTRA_DATE);
         String author = getIntent().getStringExtra(EXTRA_AUTHOR);
         String mood = getIntent().getStringExtra(EXTRA_MOOD);
         String content = getIntent().getStringExtra(EXTRA_CONTENT);
         String imageCount = getIntent().getStringExtra(EXTRA_IMAGE_COUNT);
         String imageUri = getIntent().getStringExtra(EXTRA_IMAGE_URI);
+        String emotionSummary = getIntent().getStringExtra(EXTRA_EMOTION_SUMMARY);
+        String triggerEvent = getIntent().getStringExtra(EXTRA_TRIGGER_EVENT);
+        String messageToPartner = getIntent().getStringExtra(EXTRA_MESSAGE_TO_PARTNER);
         ArrayList<String> imageUris = getIntent().getStringArrayListExtra(EXTRA_IMAGE_URIS);
 
         if (imageUris == null) {
             imageUris = new ArrayList<>();
         }
-        if (imageUris.isEmpty() && imageUri != null && !imageUri.isEmpty()) {
+        if (imageUris.isEmpty() && !safeTrim(imageUri).isEmpty()) {
             imageUris.add(imageUri);
         }
 
-        tvDate.setText(date == null ? "2026.04.18" : date);
-        tvAuthor.setText(author == null ? "我" : author);
-        tvMood.setText(mood == null ? "开心 🙂" : mood);
-        tvContent.setText(content == null ? "今天我们聊了很久，感觉轻松了很多。" : content);
-        tvImageCount.setText(imageCount == null ? "1 张图片" : imageCount);
+        bindDiaryDetail(
+                date,
+                author,
+                mood,
+                content,
+                imageCount,
+                imageUris,
+                emotionSummary,
+                triggerEvent,
+                messageToPartner
+        );
+    }
+
+    private void bindDeleteState() {
+        if (safeTrim(diaryId).isEmpty()) {
+            tvDelete.setVisibility(View.GONE);
+            return;
+        }
+        tvDelete.setVisibility(View.VISIBLE);
+        tvDelete.setOnClickListener(v -> showDeleteDialog());
+    }
+
+    private void bindDiaryDetail(String date, String author, String mood, String content,
+                                 String imageCount, List<String> imageUris,
+                                 String emotionSummary, String triggerEvent,
+                                 String messageToPartner) {
+        tvDate.setText(nonEmpty(date, "2026.04.18"));
+        tvAuthor.setText(nonEmpty(author, "我"));
+        tvMood.setText(nonEmpty(mood, "心情：未记录"));
+        tvContent.setText(nonEmpty(content, "今天的记录还没写完整。"));
+        tvImageCount.setText(nonEmpty(imageCount, imageUris.size() + " 张图片"));
 
         if (imageUris.isEmpty()) {
             layoutPhotoPanel.setVisibility(View.GONE);
@@ -98,13 +156,33 @@ public class DiaryDetailActivity extends AppCompatActivity {
             bindImageStrip(layoutDiaryPhotos, imageUris, 180, 180);
         }
 
-        // Only show delete button if diaryId is provided (own diary)
-        if (diaryId != null && !diaryId.isEmpty()) {
-            tvDelete.setVisibility(View.VISIBLE);
-            tvDelete.setOnClickListener(v -> showDeleteDialog());
-        } else {
-            tvDelete.setVisibility(View.GONE);
+        bindDiaryInsight(emotionSummary, triggerEvent, messageToPartner);
+    }
+
+    private void bindDiaryInsight(String emotionSummary, String triggerEvent, String messageToPartner) {
+        String safeEmotionSummary = safeTrim(emotionSummary);
+        String safeTriggerEvent = safeTrim(triggerEvent);
+        String safeMessageToPartner = safeTrim(messageToPartner);
+        boolean hasInsight = !safeEmotionSummary.isEmpty()
+                || !safeTriggerEvent.isEmpty()
+                || !safeMessageToPartner.isEmpty();
+        layoutDiaryInsight.setVisibility(hasInsight ? View.VISIBLE : View.GONE);
+        if (!hasInsight) {
+            return;
         }
+
+        tvEmotionSummary.setText(nonEmpty(
+                safeEmotionSummary,
+                "今天的情绪已经被记录下来了，只是还需要更多细节来总结。"
+        ));
+        tvTriggerEvent.setText(nonEmpty(
+                safeTriggerEvent,
+                "这篇日记里还没有足够明确的触发事件。"
+        ));
+        tvMessageToPartner.setText(nonEmpty(
+                safeMessageToPartner,
+                "我还有些感受，想找个合适的时候认真和你聊聊。"
+        ));
     }
 
     private void bindImageStrip(LinearLayout container, List<String> imageUris,
@@ -130,11 +208,6 @@ public class DiaryDetailActivity extends AppCompatActivity {
         }
     }
 
-    private void bindEvents() {
-        ImageView ivBack = findViewById(R.id.ivBack);
-        ivBack.setOnClickListener(v -> finish());
-    }
-
     private void showDeleteDialog() {
         new AlertDialog.Builder(this)
                 .setTitle("删除日记")
@@ -145,7 +218,7 @@ public class DiaryDetailActivity extends AppCompatActivity {
     }
 
     private void deleteDiary() {
-        if (diaryId == null || diaryId.isEmpty()) {
+        if (safeTrim(diaryId).isEmpty()) {
             return;
         }
 
@@ -167,7 +240,7 @@ public class DiaryDetailActivity extends AppCompatActivity {
     }
 
     private void openImagePreview(String imageRef) {
-        if (imageRef == null || imageRef.trim().isEmpty()) {
+        if (safeTrim(imageRef).isEmpty()) {
             return;
         }
         Intent intent = new Intent(this, ChatImagePreviewActivity.class);
@@ -181,5 +254,14 @@ public class DiaryDetailActivity extends AppCompatActivity {
                 value,
                 getResources().getDisplayMetrics()
         );
+    }
+
+    private String safeTrim(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private String nonEmpty(String value, String fallback) {
+        String trimmed = safeTrim(value);
+        return trimmed.isEmpty() ? fallback : trimmed;
     }
 }

@@ -4,9 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.nestchat.server.common.BusinessException;
 import com.nestchat.server.common.IdGenerator;
+import com.nestchat.server.common.MediaUrlHelper;
 import com.nestchat.server.common.ResultCode;
 import com.nestchat.server.dto.request.CreateDiaryRequest;
 import com.nestchat.server.dto.response.DiaryDetailResponse;
+import com.nestchat.server.dto.response.DiaryInsightResponse;
 import com.nestchat.server.dto.response.DiaryListResponse;
 import com.nestchat.server.dto.response.DiarySummaryResponse;
 import com.nestchat.server.dto.response.MoodTrendResponse;
@@ -62,15 +64,20 @@ public class DiaryService {
     private final FileRecordMapper fileRecordMapper;
     private final RelationMapper relationMapper;
     private final UserMapper userMapper;
+    private final MediaUrlHelper mediaUrlHelper;
+    private final DiaryInsightService diaryInsightService;
 
     public DiaryService(DiaryMapper diaryMapper, DiaryImageMapper diaryImageMapper,
                         FileRecordMapper fileRecordMapper, RelationMapper relationMapper,
-                        UserMapper userMapper) {
+                        UserMapper userMapper, MediaUrlHelper mediaUrlHelper,
+                        DiaryInsightService diaryInsightService) {
         this.diaryMapper = diaryMapper;
         this.diaryImageMapper = diaryImageMapper;
         this.fileRecordMapper = fileRecordMapper;
         this.relationMapper = relationMapper;
         this.userMapper = userMapper;
+        this.mediaUrlHelper = mediaUrlHelper;
+        this.diaryInsightService = diaryInsightService;
     }
 
     public DiaryListResponse listDiaries(String userId, int pageNo, int pageSize) {
@@ -104,7 +111,7 @@ public class DiaryService {
                             .eq(DiaryImage::getDiaryId, diary.getDiaryId())
                             .orderByAsc(DiaryImage::getSortOrder));
             item.setImageCount(images.size());
-            item.setCoverUrl(images.isEmpty() ? "" : images.get(0).getImageUrl());
+            item.setCoverUrl(images.isEmpty() ? "" : mediaUrlHelper.toPublicUrl(images.get(0).getImageUrl()));
 
             items.add(item);
         }
@@ -144,7 +151,11 @@ public class DiaryService {
         resp.setMoodCode(diary.getMoodCode());
         resp.setMoodText(diary.getMoodText());
         resp.setContent(diary.getContent());
-        resp.setImageUrls(images.stream().map(DiaryImage::getImageUrl).collect(Collectors.toList()));
+        resp.setImageUrls(images.stream()
+                .map(DiaryImage::getImageUrl)
+                .map(mediaUrlHelper::toPublicUrl)
+                .collect(Collectors.toList()));
+        applyDiaryInsight(resp);
         return resp;
     }
 
@@ -171,12 +182,13 @@ public class DiaryService {
             for (String fileId : req.getImageFileIds()) {
                 FileRecord file = fileRecordMapper.selectById(fileId);
                 if (file != null) {
+                    String storedPath = mediaUrlHelper.toStoredPath(file.getFileUrl());
                     DiaryImage img = new DiaryImage();
                     img.setDiaryId(diary.getDiaryId());
-                    img.setImageUrl(file.getFileUrl());
+                    img.setImageUrl(storedPath);
                     img.setSortOrder(order++);
                     diaryImageMapper.insert(img);
-                    imageUrls.add(file.getFileUrl());
+                    imageUrls.add(mediaUrlHelper.toPublicUrl(storedPath));
                 }
             }
         }
@@ -197,6 +209,7 @@ public class DiaryService {
         resp.setMoodText(diary.getMoodText());
         resp.setContent(diary.getContent());
         resp.setImageUrls(imageUrls);
+        applyDiaryInsight(resp);
         return resp;
     }
 
@@ -272,5 +285,17 @@ public class DiaryService {
 
         // Delete diary
         diaryMapper.deleteById(diaryId);
+    }
+
+    private void applyDiaryInsight(DiaryDetailResponse resp) {
+        DiaryInsightResponse insight = diaryInsightService.summarize(
+                resp.getMoodCode(),
+                resp.getMoodText(),
+                resp.getContent(),
+                resp.getImageUrls()
+        );
+        resp.setEmotionSummary(insight.getEmotionSummary());
+        resp.setTriggerEvent(insight.getTriggerEvent());
+        resp.setMessageToPartner(insight.getMessageToPartner());
     }
 }

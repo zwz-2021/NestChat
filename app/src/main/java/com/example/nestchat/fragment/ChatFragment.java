@@ -9,6 +9,8 @@ import android.media.MediaPlayer;
 import android.media.MediaRecorder;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
@@ -42,6 +44,7 @@ import com.example.nestchat.api.ApiError;
 import com.example.nestchat.api.AiApi;
 import com.example.nestchat.api.ChatApi;
 import com.example.nestchat.api.FileApi;
+import com.example.nestchat.api.MediaUrlResolver;
 import com.example.nestchat.api.RelationApi;
 import com.example.nestchat.util.AvatarImageLoader;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
@@ -86,6 +89,9 @@ public class ChatFragment extends Fragment {
     private TextView tvPartnerMood;
     private TextView tvLastActive;
     private TextView tvTodayDiary;
+    private View layoutRiskTip;
+    private TextView tvRiskTipTitle;
+    private TextView tvRiskTipMessage;
     private final ArrayList<ChatMessage> messages = new ArrayList<>();
 
     private boolean isVoiceMode = false;
@@ -105,6 +111,24 @@ public class ChatFragment extends Fragment {
     private String myAvatarUrl;
     private String partnerAvatarUrl;
     private boolean isBound = false;
+    private final ArrayList<String> currentPartnerTurnTexts = new ArrayList<>();
+    private final ArrayList<String> currentPartnerTurnMessageKeys = new ArrayList<>();
+    private String currentTurnOwner = "";
+    private String currentPartnerTurnKey = "";
+    private String lastAnalyzedPartnerTurnKey = "";
+    private String activeRiskRequestKey = "";
+
+    private static final long POLLING_INTERVAL_MS = 1000;
+    private final Handler pollingHandler = new Handler(Looper.getMainLooper());
+    private final Runnable pollingRunnable = new Runnable() {
+        @Override
+        public void run() {
+            refreshNewMessages();
+            pollingHandler.postDelayed(this, POLLING_INTERVAL_MS);
+        }
+    };
+
+    private String lastMessageTime;
 
     private final ActivityResultLauncher<String> recordAudioPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
@@ -153,6 +177,22 @@ public class ChatFragment extends Fragment {
         sendHeartbeat();
     }
 
+    @Override
+    public void onStart() {
+        super.onStart();
+        startPolling();
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        stopPolling();
+        if (isRecording) {
+            stopVoiceRecording(false);
+        }
+        releasePlayer(true);
+    }
+
     private void initViews(View view) {
         scrollMessages = view.findViewById(R.id.scrollMessages);
         layoutMessageList = view.findViewById(R.id.layoutMessageList);
@@ -169,6 +209,9 @@ public class ChatFragment extends Fragment {
         tvPartnerMood = view.findViewById(R.id.tvPartnerMood);
         tvLastActive = view.findViewById(R.id.tvLastActive);
         tvTodayDiary = view.findViewById(R.id.tvTodayDiary);
+        layoutRiskTip = view.findViewById(R.id.layoutRiskTip);
+        tvRiskTipTitle = view.findViewById(R.id.tvRiskTipTitle);
+        tvRiskTipMessage = view.findViewById(R.id.tvRiskTipMessage);
 
         ViewGroup.MarginLayoutParams params =
                 (ViewGroup.MarginLayoutParams) layoutInputBar.getLayoutParams();
@@ -256,6 +299,7 @@ public class ChatFragment extends Fragment {
     }
 
     private void renderUnboundState() {
+        resetRiskDetectionState();
         // 隐藏聊天相关内容
         scrollMessages.setVisibility(View.GONE);
         layoutInputBar.setVisibility(View.GONE);
@@ -403,6 +447,8 @@ public class ChatFragment extends Fragment {
 
                 if (cursor == null) {
                     messages.clear();
+                    lastMessageTime = null;
+                    resetRiskDetectionState();
                 }
 
                 if (data.items != null) {
@@ -410,6 +456,7 @@ public class ChatFragment extends Fragment {
                     List<ChatApi.MessageResponse> items = data.items;
                     for (int i = items.size() - 1; i >= 0; i--) {
                         messages.add(convertMessage(items.get(i)));
+                        updateLastMessageTime(items.get(i));
                     }
                 }
 
@@ -417,6 +464,9 @@ public class ChatFragment extends Fragment {
                 hasMore = data.hasMore;
                 renderMessages();
                 scrollToBottom();
+
+                // Start polling after initial load
+                startPolling();
             }
 
             @Override
@@ -446,10 +496,10 @@ public class ChatFragment extends Fragment {
 
         if ("image".equals(msg.messageType)) {
             contentType = CONTENT_IMAGE;
-            imageUri = msg.imageUrl != null ? msg.imageUrl : "";
+            imageUri = MediaUrlResolver.resolve(msg.imageUrl);
         } else if ("voice".equals(msg.messageType)) {
             contentType = CONTENT_VOICE;
-            audioPath = msg.voiceUrl != null ? msg.voiceUrl : "";
+            audioPath = MediaUrlResolver.resolve(msg.voiceUrl);
             durationSeconds = msg.durationSeconds;
         }
 
@@ -458,7 +508,17 @@ public class ChatFragment extends Fragment {
             time = msg.createdAt.substring(11, 16);
         }
 
-        return new ChatMessage(type, contentType, content, time, audioPath, durationSeconds, imageUri);
+        return new ChatMessage(
+                type,
+                contentType,
+                content,
+                time,
+                audioPath,
+                durationSeconds,
+                imageUri,
+                safeTrim(msg.messageId),
+                safeTrim(msg.clientMessageId)
+        );
     }
 
     private void bindEvents(View view) {
@@ -556,8 +616,13 @@ public class ChatFragment extends Fragment {
             return;
         }
 
+        onLocalUserTurnStarted();
+
+        String clientMessageId = UUID.randomUUID().toString();
+
         // Optimistic: show message immediately
-        messages.add(new ChatMessage(TYPE_RIGHT, CONTENT_TEXT, content, getCurrentTime()));
+        messages.add(new ChatMessage(TYPE_RIGHT, CONTENT_TEXT, content, getCurrentTime(),
+                "", 0, "", "", clientMessageId));
         etMessageInput.setText("");
         etMessageInput.clearFocus();
         appendLastMessage();
@@ -565,7 +630,7 @@ public class ChatFragment extends Fragment {
         ChatApi.SendTextMessageRequest req = new ChatApi.SendTextMessageRequest();
         req.conversationId = conversationId;
         req.content = content;
-        req.clientMessageId = UUID.randomUUID().toString();
+        req.clientMessageId = clientMessageId;
 
         ChatApi.Impl.sendTextMessage(req, new ApiCallback<ChatApi.MessageResponse>() {
             @Override
@@ -589,8 +654,12 @@ public class ChatFragment extends Fragment {
             return;
         }
 
+        onLocalUserTurnStarted();
+
+        String clientMessageId = UUID.randomUUID().toString();
+
         // Show optimistically
-        messages.add(ChatMessage.image(TYPE_RIGHT, getCurrentTime(), uri.toString()));
+        messages.add(ChatMessage.image(TYPE_RIGHT, getCurrentTime(), uri.toString(), clientMessageId));
         appendLastMessage();
 
         FileApi.UploadFileRequest uploadReq = new FileApi.UploadFileRequest();
@@ -607,7 +676,7 @@ public class ChatFragment extends Fragment {
                 ChatApi.SendImageMessageRequest req = new ChatApi.SendImageMessageRequest();
                 req.conversationId = conversationId;
                 req.imageFileId = data.fileId;
-                req.clientMessageId = UUID.randomUUID().toString();
+                req.clientMessageId = clientMessageId;
 
                 ChatApi.Impl.sendImageMessage(req, new ApiCallback<ChatApi.MessageResponse>() {
                     @Override
@@ -748,15 +817,19 @@ public class ChatFragment extends Fragment {
         String voicePath = currentRecordingPath;
         currentRecordingPath = null;
 
+        onLocalUserTurnStarted();
+
+        String clientMessageId = UUID.randomUUID().toString();
+
         // Show optimistically
-        messages.add(ChatMessage.voice(TYPE_RIGHT, getCurrentTime(), voicePath, durationSeconds));
+        messages.add(ChatMessage.voice(TYPE_RIGHT, getCurrentTime(), voicePath, durationSeconds, clientMessageId));
         appendLastMessage();
 
         // Upload and send
-        uploadAndSendVoice(voicePath, durationSeconds);
+        uploadAndSendVoice(voicePath, durationSeconds, clientMessageId);
     }
 
-    private void uploadAndSendVoice(String voicePath, int durationSeconds) {
+    private void uploadAndSendVoice(String voicePath, int durationSeconds, String clientMessageId) {
         if (conversationId == null) return;
 
         FileApi.UploadFileRequest uploadReq = new FileApi.UploadFileRequest();
@@ -773,7 +846,7 @@ public class ChatFragment extends Fragment {
                 req.conversationId = conversationId;
                 req.voiceFileId = data.fileId;
                 req.durationSeconds = durationSeconds;
-                req.clientMessageId = UUID.randomUUID().toString();
+                req.clientMessageId = clientMessageId;
 
                 ChatApi.Impl.sendVoiceMessage(req, new ApiCallback<ChatApi.MessageResponse>() {
                     @Override
@@ -921,18 +994,19 @@ public class ChatFragment extends Fragment {
     }
 
     private void playVoiceMessage(String audioPath) {
-        if (TextUtils.isEmpty(audioPath)) {
+        String resolvedAudioPath = resolvePlayableAudioPath(audioPath);
+        if (TextUtils.isEmpty(resolvedAudioPath)) {
             Toast.makeText(requireContext(), "语音文件不存在", Toast.LENGTH_SHORT).show();
             return;
         }
 
         // For local files
-        if (!audioPath.startsWith("http") && !new File(audioPath).exists()) {
+        if (!resolvedAudioPath.startsWith("http") && !new File(resolvedAudioPath).exists()) {
             Toast.makeText(requireContext(), "语音文件不存在", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        if (audioPath.equals(currentPlayingAudioPath) && mediaPlayer != null && mediaPlayer.isPlaying()) {
+        if (resolvedAudioPath.equals(currentPlayingAudioPath) && mediaPlayer != null && mediaPlayer.isPlaying()) {
             releasePlayer(true);
             return;
         }
@@ -940,9 +1014,9 @@ public class ChatFragment extends Fragment {
         releasePlayer();
         try {
             mediaPlayer = new MediaPlayer();
-            mediaPlayer.setDataSource(audioPath);
+            mediaPlayer.setDataSource(resolvedAudioPath);
             mediaPlayer.prepare();
-            currentPlayingAudioPath = audioPath;
+            currentPlayingAudioPath = resolvedAudioPath;
             renderMessages();
             mediaPlayer.setOnCompletionListener(mp -> releasePlayer(true));
             mediaPlayer.start();
@@ -1104,13 +1178,271 @@ public class ChatFragment extends Fragment {
         }
     }
 
-    @Override
-    public void onStop() {
-        super.onStop();
-        if (isRecording) {
-            stopVoiceRecording(false);
+    private String resolvePlayableAudioPath(String audioPath) {
+        if (TextUtils.isEmpty(audioPath)) {
+            return "";
         }
-        releasePlayer(true);
+        File localFile = new File(audioPath);
+        if (localFile.exists()) {
+            return audioPath;
+        }
+        return MediaUrlResolver.resolve(audioPath);
+    }
+
+    private void resetRiskDetectionState() {
+        currentTurnOwner = "";
+        currentPartnerTurnTexts.clear();
+        currentPartnerTurnMessageKeys.clear();
+        currentPartnerTurnKey = "";
+        lastAnalyzedPartnerTurnKey = "";
+        activeRiskRequestKey = "";
+        hideRiskPrompt();
+    }
+
+    private void onLocalUserTurnStarted() {
+        currentTurnOwner = "me";
+        clearCurrentPartnerTurn();
+        hideRiskPrompt();
+    }
+
+    private void startPartnerTurnIfNeeded() {
+        if ("ta".equals(currentTurnOwner)) {
+            return;
+        }
+        currentTurnOwner = "ta";
+        clearCurrentPartnerTurn();
+        hideRiskPrompt();
+    }
+
+    private void clearCurrentPartnerTurn() {
+        currentPartnerTurnTexts.clear();
+        currentPartnerTurnMessageKeys.clear();
+        currentPartnerTurnKey = "";
+        activeRiskRequestKey = "";
+    }
+
+    private boolean recordIncomingMessageForRisk(ChatApi.MessageResponse msg) {
+        String senderType = safeTrim(msg.senderType);
+        if ("me".equals(senderType)) {
+            onLocalUserTurnStarted();
+            return false;
+        }
+        if (!"ta".equals(senderType)) {
+            return false;
+        }
+
+        startPartnerTurnIfNeeded();
+
+        if (!"text".equals(safeTrim(msg.messageType))) {
+            return false;
+        }
+
+        String content = safeTrim(msg.content);
+        if (content.isEmpty()) {
+            return false;
+        }
+
+        currentPartnerTurnTexts.add(content);
+        currentPartnerTurnMessageKeys.add(resolveRiskMessageKey(msg));
+        currentPartnerTurnKey = TextUtils.join("|", currentPartnerTurnMessageKeys);
+        return true;
+    }
+
+    private String resolveRiskMessageKey(ChatApi.MessageResponse msg) {
+        String messageId = safeTrim(msg.messageId);
+        if (!messageId.isEmpty()) {
+            return messageId;
+        }
+        String createdAt = safeTrim(msg.createdAt);
+        if (!createdAt.isEmpty()) {
+            return createdAt;
+        }
+        return safeTrim(msg.messageType) + ":" + safeTrim(msg.content);
+    }
+
+    private void triggerEmotionRiskAnalysisIfNeeded() {
+        if (!"ta".equals(currentTurnOwner)) {
+            return;
+        }
+        if (currentPartnerTurnTexts.isEmpty() || TextUtils.isEmpty(currentPartnerTurnKey)) {
+            hideRiskPrompt();
+            return;
+        }
+        if (currentPartnerTurnKey.equals(lastAnalyzedPartnerTurnKey)) {
+            return;
+        }
+
+        final String requestKey = currentPartnerTurnKey;
+        final ArrayList<String> messagesToAnalyze = new ArrayList<>(currentPartnerTurnTexts);
+        activeRiskRequestKey = requestKey;
+
+        ChatApi.Impl.analyzeEmotionRisk(messagesToAnalyze, new ApiCallback<ChatApi.EmotionRiskResponse>() {
+            @Override
+            public void onSuccess(ChatApi.EmotionRiskResponse data) {
+                if (!isAdded()) {
+                    return;
+                }
+                if (!requestKey.equals(activeRiskRequestKey)
+                        || !requestKey.equals(currentPartnerTurnKey)
+                        || !"ta".equals(currentTurnOwner)) {
+                    return;
+                }
+
+                lastAnalyzedPartnerTurnKey = requestKey;
+                activeRiskRequestKey = "";
+
+                if (data != null && data.shouldPrompt && !TextUtils.isEmpty(safeTrim(data.message))) {
+                    showRiskPrompt(
+                            TextUtils.isEmpty(safeTrim(data.title)) ? "情绪风险提示" : safeTrim(data.title),
+                            safeTrim(data.message)
+                    );
+                    return;
+                }
+                hideRiskPrompt();
+            }
+
+            @Override
+            public void onError(ApiError error) {
+                if (!isAdded() || !requestKey.equals(activeRiskRequestKey)) {
+                    return;
+                }
+                lastAnalyzedPartnerTurnKey = requestKey;
+                activeRiskRequestKey = "";
+                hideRiskPrompt();
+            }
+        });
+    }
+
+    private void showRiskPrompt(String title, String message) {
+        if (layoutRiskTip == null) {
+            return;
+        }
+        tvRiskTipTitle.setText(title);
+        tvRiskTipMessage.setText(message);
+        layoutRiskTip.setVisibility(View.VISIBLE);
+    }
+
+    private void hideRiskPrompt() {
+        if (layoutRiskTip == null) {
+            return;
+        }
+        layoutRiskTip.setVisibility(View.GONE);
+        tvRiskTipTitle.setText("");
+        tvRiskTipMessage.setText("");
+    }
+
+    private void startPolling() {
+        if (!isBound || conversationId == null) {
+            return;
+        }
+        pollingHandler.removeCallbacks(pollingRunnable);
+        pollingHandler.postDelayed(pollingRunnable, POLLING_INTERVAL_MS);
+    }
+
+    private void stopPolling() {
+        pollingHandler.removeCallbacks(pollingRunnable);
+    }
+
+    private void refreshNewMessages() {
+        if (!isAdded() || !isBound || conversationId == null) {
+            return;
+        }
+
+        ChatApi.Impl.getMessages(conversationId, null, 50, new ApiCallback<ChatApi.MessageListResponse>() {
+            @Override
+            public void onSuccess(ChatApi.MessageListResponse data) {
+                if (!isAdded() || data == null || data.items == null) {
+                    return;
+                }
+
+                boolean hasNewMessages = false;
+                boolean shouldAnalyzeRisk = false;
+                for (int i = data.items.size() - 1; i >= 0; i--) {
+                    ChatApi.MessageResponse msg = data.items.get(i);
+                    if (isNewMessage(msg)) {
+                        ChatMessage converted = convertMessage(msg);
+                        int existingIndex = findMessageIndexForServerMessage(converted);
+                        if (existingIndex >= 0) {
+                            messages.set(existingIndex, converted);
+                        } else {
+                            messages.add(converted);
+                        }
+                        hasNewMessages = true;
+                        updateLastMessageTime(msg);
+                        if (recordIncomingMessageForRisk(msg)) {
+                            shouldAnalyzeRisk = true;
+                        }
+                    }
+                }
+
+                if (shouldAnalyzeRisk) {
+                    triggerEmotionRiskAnalysisIfNeeded();
+                }
+
+                if (hasNewMessages) {
+                    renderMessages();
+                    scrollToBottom();
+                }
+            }
+
+            @Override
+            public void onError(ApiError error) {
+                // Silently ignore polling errors
+            }
+        });
+    }
+
+    private boolean isNewMessage(ChatApi.MessageResponse msg) {
+        if (msg.createdAt == null) {
+            return false;
+        }
+        if (lastMessageTime == null) {
+            return true;
+        }
+        return msg.createdAt.compareTo(lastMessageTime) > 0;
+    }
+
+    private void upsertIncomingMessage(ChatApi.MessageResponse msg) {
+        if (msg == null) {
+            return;
+        }
+
+        ChatMessage converted = convertMessage(msg);
+        int existingIndex = findMessageIndexForServerMessage(converted);
+        if (existingIndex >= 0) {
+            messages.set(existingIndex, converted);
+        } else {
+            messages.add(converted);
+        }
+
+        updateLastMessageTime(msg);
+        renderMessages();
+        scrollToBottom();
+    }
+
+    private int findMessageIndexForServerMessage(ChatMessage incoming) {
+        for (int i = 0; i < messages.size(); i++) {
+            ChatMessage existing = messages.get(i);
+            if (!safeTrim(incoming.messageId).isEmpty()
+                    && incoming.messageId.equals(existing.messageId)) {
+                return i;
+            }
+            if (!safeTrim(incoming.clientMessageId).isEmpty()
+                    && incoming.clientMessageId.equals(existing.clientMessageId)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private void updateLastMessageTime(ChatApi.MessageResponse msg) {
+        if (msg.createdAt != null && (lastMessageTime == null || msg.createdAt.compareTo(lastMessageTime) > 0)) {
+            lastMessageTime = msg.createdAt;
+        }
+    }
+
+    private String safeTrim(String value) {
+        return value == null ? "" : value.trim();
     }
 
     @Override
@@ -1212,13 +1544,21 @@ public class ChatFragment extends Fragment {
         final String audioPath;
         final int durationSeconds;
         final String imageUri;
+        final String messageId;
+        final String clientMessageId;
 
         ChatMessage(int type, int contentType, String content, String time) {
-            this(type, contentType, content, time, "", 0, "");
+            this(type, contentType, content, time, "", 0, "", "", "");
         }
 
         ChatMessage(int type, int contentType, String content, String time,
                     String audioPath, int durationSeconds, String imageUri) {
+            this(type, contentType, content, time, audioPath, durationSeconds, imageUri, "", "");
+        }
+
+        ChatMessage(int type, int contentType, String content, String time,
+                    String audioPath, int durationSeconds, String imageUri,
+                    String messageId, String clientMessageId) {
             this.type = type;
             this.contentType = contentType;
             this.content = content;
@@ -1226,14 +1566,19 @@ public class ChatFragment extends Fragment {
             this.audioPath = audioPath;
             this.durationSeconds = durationSeconds;
             this.imageUri = imageUri;
+            this.messageId = messageId;
+            this.clientMessageId = clientMessageId;
         }
 
-        static ChatMessage voice(int type, String time, String audioPath, int durationSeconds) {
-            return new ChatMessage(type, CONTENT_VOICE, "", time, audioPath, durationSeconds, "");
+        static ChatMessage voice(int type, String time, String audioPath, int durationSeconds,
+                                 String clientMessageId) {
+            return new ChatMessage(type, CONTENT_VOICE, "", time, audioPath, durationSeconds, "",
+                    "", clientMessageId);
         }
 
-        static ChatMessage image(int type, String time, String imageUri) {
-            return new ChatMessage(type, CONTENT_IMAGE, "", time, "", 0, imageUri);
+        static ChatMessage image(int type, String time, String imageUri, String clientMessageId) {
+            return new ChatMessage(type, CONTENT_IMAGE, "", time, "", 0, imageUri,
+                    "", clientMessageId);
         }
 
         Bundle toBundle() {
@@ -1245,6 +1590,8 @@ public class ChatFragment extends Fragment {
             bundle.putString("audioPath", audioPath);
             bundle.putInt("durationSeconds", durationSeconds);
             bundle.putString("imageUri", imageUri);
+            bundle.putString("messageId", messageId);
+            bundle.putString("clientMessageId", clientMessageId);
             return bundle;
         }
 
@@ -1256,7 +1603,9 @@ public class ChatFragment extends Fragment {
                     bundle.getString("time", ""),
                     bundle.getString("audioPath", ""),
                     bundle.getInt("durationSeconds", 0),
-                    bundle.getString("imageUri", "")
+                    bundle.getString("imageUri", ""),
+                    bundle.getString("messageId", ""),
+                    bundle.getString("clientMessageId", "")
             );
         }
     }
