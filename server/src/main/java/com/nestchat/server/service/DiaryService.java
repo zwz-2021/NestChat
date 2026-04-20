@@ -6,30 +6,55 @@ import com.nestchat.server.common.BusinessException;
 import com.nestchat.server.common.IdGenerator;
 import com.nestchat.server.common.ResultCode;
 import com.nestchat.server.dto.request.CreateDiaryRequest;
-import com.nestchat.server.dto.response.*;
-import com.nestchat.server.entity.*;
-import com.nestchat.server.mapper.*;
+import com.nestchat.server.dto.response.DiaryDetailResponse;
+import com.nestchat.server.dto.response.DiaryListResponse;
+import com.nestchat.server.dto.response.DiarySummaryResponse;
+import com.nestchat.server.dto.response.MoodTrendResponse;
+import com.nestchat.server.entity.Diary;
+import com.nestchat.server.entity.DiaryImage;
+import com.nestchat.server.entity.FileRecord;
+import com.nestchat.server.entity.Relation;
+import com.nestchat.server.entity.User;
+import com.nestchat.server.mapper.DiaryImageMapper;
+import com.nestchat.server.mapper.DiaryMapper;
+import com.nestchat.server.mapper.FileRecordMapper;
+import com.nestchat.server.mapper.RelationMapper;
+import com.nestchat.server.mapper.UserMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
 public class DiaryService {
 
-    private static final Map<String, Integer> MOOD_SCORE = Map.of(
-            "happy", 5,
-            "sad", 2,
-            "tired", 3
+    private static final Map<String, Integer> MOOD_SCORE = Map.ofEntries(
+            Map.entry("happy", 5),
+            Map.entry("calm", 4),
+            Map.entry("love", 5),
+            Map.entry("sad", 2),
+            Map.entry("wronged", 2),
+            Map.entry("angry", 1),
+            Map.entry("tired", 3),
+            Map.entry("anxious", 2)
     );
-    private static final Map<String, String> MOOD_TEXT = Map.of(
-            "happy", "开心",
-            "sad", "难过",
-            "tired", "疲惫"
+    private static final Map<String, String> MOOD_TEXT = Map.ofEntries(
+            Map.entry("happy", "开心"),
+            Map.entry("calm", "平静"),
+            Map.entry("love", "心动"),
+            Map.entry("sad", "难过"),
+            Map.entry("wronged", "委屈"),
+            Map.entry("angry", "生气"),
+            Map.entry("tired", "疲惫"),
+            Map.entry("anxious", "焦虑")
     );
 
     private final DiaryMapper diaryMapper;
@@ -49,7 +74,6 @@ public class DiaryService {
     }
 
     public DiaryListResponse listDiaries(String userId, int pageNo, int pageSize) {
-        // 获取自己和伴侣的 userId
         List<String> userIds = new ArrayList<>();
         userIds.add(userId);
         Relation relation = relationMapper.selectBoundByUserId(userId);
@@ -72,11 +96,9 @@ public class DiaryService {
             item.setAuthorType(diary.getUserId().equals(userId) ? "me" : "ta");
             item.setMoodText(diary.getMoodText());
 
-            // 摘要
             String content = diary.getContent() != null ? diary.getContent() : "";
-            item.setContentSummary(content.length() > 50 ? content.substring(0, 50) + "……" : content);
+            item.setContentSummary(content.length() > 50 ? content.substring(0, 50) + "..." : content);
 
-            // 图片信息
             List<DiaryImage> images = diaryImageMapper.selectList(
                     new LambdaQueryWrapper<DiaryImage>()
                             .eq(DiaryImage::getDiaryId, diary.getDiaryId())
@@ -99,7 +121,6 @@ public class DiaryService {
             throw new BusinessException(ResultCode.NOT_FOUND, "日记不存在");
         }
 
-        // 校验权限：只能看自己或伴侣的日记
         if (!diary.getUserId().equals(userId)) {
             Relation relation = relationMapper.selectBoundByUserId(userId);
             if (relation == null) {
@@ -144,7 +165,6 @@ public class DiaryService {
         diary.setCreatedAt(LocalDateTime.now());
         diaryMapper.insert(diary);
 
-        // 处理图片
         List<String> imageUrls = new ArrayList<>();
         if (req.getImageFileIds() != null) {
             int order = 0;
@@ -161,7 +181,6 @@ public class DiaryService {
             }
         }
 
-        // 同步更新用户情绪
         User user = userMapper.selectById(userId);
         if (user != null) {
             user.setMoodCode(req.getMoodCode());
@@ -191,22 +210,20 @@ public class DiaryService {
 
         String partnerId = relation.getUserIdA().equals(userId) ? relation.getUserIdB() : relation.getUserIdA();
 
-        // 查询伴侣最近 N 天的日记
         LocalDate endDate = LocalDate.now();
         LocalDate startDate = endDate.minusDays(days - 1);
-        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy.MM.dd");
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
         List<Diary> diaries = diaryMapper.selectList(
                 new LambdaQueryWrapper<Diary>()
                         .eq(Diary::getUserId, partnerId)
                         .ge(Diary::getDate, startDate.format(fmt))
                         .le(Diary::getDate, endDate.format(fmt))
-                        .orderByAsc(Diary::getDate));
+                        .orderByAsc(Diary::getDate, Diary::getCreatedAt));
 
-        // 按日期取最新一条日记的情绪
         Map<String, Diary> dateMap = new LinkedHashMap<>();
-        for (Diary d : diaries) {
-            dateMap.put(d.getDate(), d);
+        for (Diary diary : diaries) {
+            dateMap.put(diary.getDate(), diary);
         }
 
         List<MoodTrendResponse.MoodPoint> points = new ArrayList<>();
@@ -233,5 +250,27 @@ public class DiaryService {
         MoodTrendResponse resp = new MoodTrendResponse();
         resp.setPoints(points);
         return resp;
+    }
+
+    @Transactional
+    public void deleteDiary(String userId, String diaryId) {
+        Diary diary = diaryMapper.selectById(diaryId);
+        if (diary == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "日记不存在");
+        }
+
+        // Only allow deleting own diaries
+        if (!diary.getUserId().equals(userId)) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "只能删除自己的日记");
+        }
+
+        // Delete diary images first
+        diaryImageMapper.delete(
+                new LambdaQueryWrapper<DiaryImage>()
+                        .eq(DiaryImage::getDiaryId, diaryId)
+        );
+
+        // Delete diary
+        diaryMapper.deleteById(diaryId);
     }
 }

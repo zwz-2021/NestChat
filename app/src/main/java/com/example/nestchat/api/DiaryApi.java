@@ -10,6 +10,7 @@ public interface DiaryApi {
     void getDiaryList(GetDiaryListRequest request, ApiCallback<DiaryListResponse> callback);
     void getDiaryDetail(String diaryId, ApiCallback<DiaryDetailResponse> callback);
     void createDiary(CreateDiaryRequest request, ApiCallback<DiaryDetailResponse> callback);
+    void deleteDiary(String diaryId, ApiCallback<Void> callback);
     void getPartnerMoodTrend(ApiCallback<MoodTrendResponse> callback);
 
     class GetDiaryListRequest {
@@ -74,6 +75,10 @@ public interface DiaryApi {
 
         public static void createDiary(CreateDiaryRequest request, ApiCallback<DiaryDetailResponse> callback) {
             ApiClient.post("/diaries", request, DiaryDetailResponse.class, callback);
+        }
+
+        public static void deleteDiary(String diaryId, ApiCallback<Void> callback) {
+            ApiClient.delete("/diaries/" + diaryId, Void.class, callback);
         }
 
         public static void getPartnerMoodTrend(int days, ApiCallback<MoodTrendResponse> callback) {

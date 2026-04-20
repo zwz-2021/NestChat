@@ -3,6 +3,7 @@ package com.example.nestchat.fragment;
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.graphics.drawable.Drawable;
 import android.media.MediaPlayer;
 import android.media.MediaRecorder;
@@ -11,7 +12,6 @@ import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -39,8 +39,11 @@ import com.example.nestchat.ChatImagePreviewActivity;
 import com.example.nestchat.R;
 import com.example.nestchat.api.ApiCallback;
 import com.example.nestchat.api.ApiError;
+import com.example.nestchat.api.AiApi;
 import com.example.nestchat.api.ChatApi;
 import com.example.nestchat.api.FileApi;
+import com.example.nestchat.api.RelationApi;
+import com.example.nestchat.util.AvatarImageLoader;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 
 import java.io.File;
@@ -77,6 +80,12 @@ public class ChatFragment extends Fragment {
     private TextView btnAi;
     private View btnPhoto;
     private View btnSend;
+    private ImageView ivPartnerAvatar;
+    private TextView tvPartnerName;
+    private TextView tvCompanionDays;
+    private TextView tvPartnerMood;
+    private TextView tvLastActive;
+    private TextView tvTodayDiary;
     private final ArrayList<ChatMessage> messages = new ArrayList<>();
 
     private boolean isVoiceMode = false;
@@ -93,12 +102,14 @@ public class ChatFragment extends Fragment {
     private String conversationId;
     private String nextCursor;
     private boolean hasMore = false;
+    private String myAvatarUrl;
+    private String partnerAvatarUrl;
+    private boolean isBound = false;
 
     private final ActivityResultLauncher<String> recordAudioPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
                 if (isGranted) {
                     Toast.makeText(requireContext(), "麦克风权限已开启，请重新按住说话", Toast.LENGTH_SHORT).show();
-                } else {
                     Toast.makeText(requireContext(), "未开启麦克风权限，无法发送语音", Toast.LENGTH_SHORT).show();
                 }
             });
@@ -133,6 +144,13 @@ public class ChatFragment extends Fragment {
         bindEvents(view);
         updateInputModeUi();
         loadChatSession();
+        sendHeartbeat();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        sendHeartbeat();
     }
 
     private void initViews(View view) {
@@ -145,6 +163,12 @@ public class ChatFragment extends Fragment {
         btnAi = view.findViewById(R.id.btnAi);
         btnPhoto = view.findViewById(R.id.btnPhoto);
         btnSend = view.findViewById(R.id.btnSend);
+        ivPartnerAvatar = view.findViewById(R.id.ivPartnerAvatar);
+        tvPartnerName = view.findViewById(R.id.tvPartnerName);
+        tvCompanionDays = view.findViewById(R.id.tvCompanionDays);
+        tvPartnerMood = view.findViewById(R.id.tvPartnerMood);
+        tvLastActive = view.findViewById(R.id.tvLastActive);
+        tvTodayDiary = view.findViewById(R.id.tvTodayDiary);
 
         ViewGroup.MarginLayoutParams params =
                 (ViewGroup.MarginLayoutParams) layoutInputBar.getLayoutParams();
@@ -152,9 +176,19 @@ public class ChatFragment extends Fragment {
     }
 
     private void applyWindowInsets(View view) {
+        View chatHeader = view.findViewById(R.id.chatHeader);
         ViewCompat.setOnApplyWindowInsetsListener(view.findViewById(R.id.rootChat), (root, insets) -> {
+            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             Insets imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime());
             boolean imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime());
+
+            // Apply system bars top padding to header
+            chatHeader.setPadding(
+                    chatHeader.getPaddingLeft(),
+                    systemBars.top + dpToPx(12),
+                    chatHeader.getPaddingRight(),
+                    chatHeader.getPaddingBottom()
+            );
 
             ViewGroup.MarginLayoutParams params =
                     (ViewGroup.MarginLayoutParams) layoutInputBar.getLayoutParams();
@@ -170,18 +204,43 @@ public class ChatFragment extends Fragment {
     }
 
     private void loadChatSession() {
+        // 首先检查关系状态
+        RelationApi.Impl.getCurrentRelation(new ApiCallback<RelationApi.RelationStatusResponse>() {
+            @Override
+            public void onSuccess(RelationApi.RelationStatusResponse relationData) {
+                if (!isAdded()) return;
+
+                isBound = relationData != null && "bound".equals(relationData.status);
+
+                if (!isBound) {
+                    renderUnboundState();
+                    return;
+                }
+
+                // 已绑定，加载聊天会话
+                loadChatSessionData();
+            }
+
+            @Override
+            public void onError(ApiError error) {
+                if (!isAdded()) return;
+                isBound = false;
+                renderUnboundState();
+            }
+        });
+    }
+
+    private void loadChatSessionData() {
         ChatApi.Impl.getChatSession(new ApiCallback<ChatApi.ChatSessionResponse>() {
             @Override
             public void onSuccess(ChatApi.ChatSessionResponse data) {
                 if (!isAdded()) return;
                 if (data != null && data.conversationId != null) {
                     conversationId = data.conversationId;
+                    partnerAvatarUrl = data.partnerAvatarUrl != null ? data.partnerAvatarUrl : "";
+                    updateChatHeader(data);
+                    loadMyAvatar();
                     loadMessages(null);
-                } else {
-                    messages.clear();
-                    messages.add(new ChatMessage(TYPE_SYSTEM, CONTENT_TEXT,
-                            "暂无聊天会话，请先绑定关系", getCurrentTime()));
-                    renderMessages();
                 }
             }
 
@@ -192,6 +251,143 @@ public class ChatFragment extends Fragment {
                 messages.add(new ChatMessage(TYPE_SYSTEM, CONTENT_TEXT,
                         "加载会话失败: " + error.message, getCurrentTime()));
                 renderMessages();
+            }
+        });
+    }
+
+    private void renderUnboundState() {
+        // 隐藏聊天相关内容
+        scrollMessages.setVisibility(View.GONE);
+        layoutInputBar.setVisibility(View.GONE);
+
+        // 显示未绑定状态
+        tvPartnerName.setText("暂未绑定关系");
+        tvCompanionDays.setText("当前没有可聊天的对象");
+        tvPartnerMood.setText("绑定后可开始聊天");
+        tvLastActive.setText("进入「我的」页面发起绑定申请");
+        tvTodayDiary.setVisibility(View.GONE);
+
+        // 设置默认头像
+        ivPartnerAvatar.setImageResource(R.drawable.ic_user);
+        ivPartnerAvatar.setImageTintList(ColorStateList.valueOf(
+                requireContext().getColor(R.color.brand_primary_dark)));
+
+        // 清空消息列表
+        messages.clear();
+        messages.add(new ChatMessage(TYPE_SYSTEM, CONTENT_TEXT,
+                "请先在「我的」页面与对方建立绑定关系", getCurrentTime()));
+        renderMessages();
+    }
+
+    private void renderBoundState() {
+        scrollMessages.setVisibility(View.VISIBLE);
+        layoutInputBar.setVisibility(View.VISIBLE);
+    }
+
+    private void updateChatHeader(ChatApi.ChatSessionResponse data) {
+        if (data == null || !isBound) return;
+
+        // 确保显示聊天界面
+        renderBoundState();
+
+        // Update partner name
+        String name = !TextUtils.isEmpty(data.partnerNickname)
+                ? data.partnerNickname
+                : "TA";
+        tvPartnerName.setText(name);
+
+        // Update partner avatar
+        AvatarImageLoader.load(ivPartnerAvatar, partnerAvatarUrl, 10);
+
+        // Update companion days
+        int days = data.companionDays > 0 ? data.companionDays : 0;
+        tvCompanionDays.setText("💕 已相伴 " + days + " 天");
+
+        // Update partner mood
+        String moodEmoji = getMoodEmoji(data.partnerMoodCode);
+        String moodText = !TextUtils.isEmpty(data.partnerMoodText) ? data.partnerMoodText : "平静";
+        tvPartnerMood.setText(moodEmoji + " " + moodText);
+
+        // Update last active time
+        if (!TextUtils.isEmpty(data.partnerLastActiveAt)) {
+            String timeAgo = formatTimeAgo(data.partnerLastActiveAt);
+            tvLastActive.setText("最后活跃：" + timeAgo);
+        } else {
+            tvLastActive.setText("最后活跃：未知");
+        }
+
+        // Update today diary status
+        if (data.partnerTodayDiary) {
+            tvTodayDiary.setVisibility(View.VISIBLE);
+            tvTodayDiary.setText("今日已写日记");
+        } else {
+            tvTodayDiary.setVisibility(View.GONE);
+        }
+    }
+
+    private String getMoodEmoji(String moodCode) {
+        if (TextUtils.isEmpty(moodCode)) return "😊";
+        switch (moodCode) {
+            case "calm": return "😌";
+            case "love": return "🥰";
+            case "sad": return "😢";
+            case "wronged": return "🥺";
+            case "angry": return "😤";
+            case "tired": return "😣";
+            case "anxious": return "😰";
+            default: return "🙂";
+        }
+    }
+
+    private String formatTimeAgo(String dateTimeStr) {
+        try {
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault());
+            java.util.Date date = sdf.parse(dateTimeStr);
+            if (date == null) return "未知";
+
+            long diffMs = System.currentTimeMillis() - date.getTime();
+            long diffMinutes = diffMs / (1000 * 60);
+            long diffHours = diffMinutes / 60;
+            long diffDays = diffHours / 24;
+
+            if (diffMinutes < 1) return "刚刚";
+            if (diffMinutes < 60) return diffMinutes + "分钟前";
+            if (diffHours < 24) return diffHours + "小时前";
+            if (diffDays < 7) return diffDays + "天前";
+            return "一周前";
+        } catch (Exception e) {
+            return "未知";
+        }
+    }
+
+    private void loadMyAvatar() {
+        com.example.nestchat.api.UserApi.Impl.getMineProfile(new ApiCallback<com.example.nestchat.api.UserApi.ProfileResponse>() {
+            @Override
+            public void onSuccess(com.example.nestchat.api.UserApi.ProfileResponse data) {
+                if (!isAdded()) return;
+                if (data != null && data.avatarUrl != null) {
+                    myAvatarUrl = data.avatarUrl;
+                    renderMessages();
+                }
+            }
+
+            @Override
+            public void onError(ApiError error) {
+                // Ignore avatar loading error
+            }
+        });
+    }
+
+    private void sendHeartbeat() {
+        com.example.nestchat.api.UserApi.Impl.heartbeat(new ApiCallback<Void>() {
+            @Override
+            public void onSuccess(Void data) {
+                // Heartbeat sent successfully
+            }
+
+            @Override
+            public void onError(ApiError error) {
+                // Ignore heartbeat error
             }
         });
     }
@@ -236,7 +432,7 @@ public class ChatFragment extends Fragment {
         int type;
         if ("system".equals(msg.senderType)) {
             type = TYPE_SYSTEM;
-        } else if ("self".equals(msg.senderType)) {
+        } else if ("me".equals(msg.senderType)) {
             type = TYPE_RIGHT;
         } else {
             type = TYPE_LEFT;
@@ -347,15 +543,16 @@ public class ChatFragment extends Fragment {
     }
 
     private void sendTextMessage() {
+        // 检查是否已绑定
+        if (!isBound || conversationId == null) {
+            Toast.makeText(requireContext(), "请先绑定关系后再开始聊天", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         String content = etMessageInput.getText().toString().trim();
         if (TextUtils.isEmpty(content)) {
             etMessageInput.setError("请输入消息");
             etMessageInput.requestFocus();
-            return;
-        }
-
-        if (conversationId == null) {
-            Toast.makeText(requireContext(), "暂无聊天会话", Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -661,6 +858,15 @@ public class ChatFragment extends Fragment {
         ImageView ivMessageImage = itemView.findViewById(R.id.ivMessageImage);
         tvTime.setText(message.time);
 
+        // Load avatar
+        if (message.type == TYPE_LEFT) {
+            ImageView ivPartnerAvatar = itemView.findViewById(R.id.ivPartnerAvatar);
+            AvatarImageLoader.load(ivPartnerAvatar, partnerAvatarUrl, 8);
+        } else if (message.type == TYPE_RIGHT) {
+            ImageView ivSelfAvatar = itemView.findViewById(R.id.ivSelfAvatar);
+            AvatarImageLoader.load(ivSelfAvatar, myAvatarUrl, 8);
+        }
+
         if (message.contentType == CONTENT_VOICE) {
             tvMessage.setVisibility(View.VISIBLE);
             ivMessageImage.setVisibility(View.GONE);
@@ -684,16 +890,9 @@ public class ChatFragment extends Fragment {
         } else if (message.contentType == CONTENT_IMAGE) {
             tvMessage.setVisibility(View.GONE);
             ivMessageImage.setVisibility(View.VISIBLE);
-            String imgUri = message.imageUri;
-            if (imgUri != null && !imgUri.isEmpty()) {
-                if (imgUri.startsWith("content://") || imgUri.startsWith("file://")) {
-                    ivMessageImage.setImageURI(Uri.parse(imgUri));
-                } else {
-                    // Network image — just show placeholder for now
-                    ivMessageImage.setImageDrawable(null);
-                }
-            }
-            ivMessageImage.setBackgroundResource(message.type == TYPE_RIGHT
+            AvatarImageLoader.loadContent(ivMessageImage, message.imageUri);
+            ivMessageImage.setBackgroundResource
+                    (message.type == TYPE_RIGHT
                     ? R.drawable.bg_chat_image_frame_right
                     : R.drawable.bg_chat_image_frame_left);
             ivMessageImage.setOnClickListener(v -> openImagePreview(message.imageUri));
@@ -754,12 +953,102 @@ public class ChatFragment extends Fragment {
     }
 
     private void showAiBottomSheet() {
+        String originalText = etMessageInput.getText().toString().trim();
+        if (TextUtils.isEmpty(originalText)) {
+            Toast.makeText(requireContext(), "请先输入内容", Toast.LENGTH_SHORT).show();
+            etMessageInput.requestFocus();
+            return;
+        }
+
         BottomSheetDialog dialog = new BottomSheetDialog(requireContext());
         View contentView = LayoutInflater.from(requireContext())
-                .inflate(R.layout.layout_ai_unavailable_sheet, null, false);
-        contentView.findViewById(R.id.btnCloseAiSheet).setOnClickListener(v -> dialog.dismiss());
+                .inflate(R.layout.layout_ai_mode_sheet, null, false);
+
+        contentView.findViewById(R.id.btnModeGentle).setOnClickListener(v -> {
+            dialog.dismiss();
+            optimizeMessage(originalText, "gentle");
+        });
+
+        contentView.findViewById(R.id.btnModeSincere).setOnClickListener(v -> {
+            dialog.dismiss();
+            optimizeMessage(originalText, "sincere");
+        });
+
+        contentView.findViewById(R.id.btnModeComfort).setOnClickListener(v -> {
+            dialog.dismiss();
+            optimizeMessage(originalText, "comfort");
+        });
+
         dialog.setContentView(contentView);
         dialog.show();
+    }
+
+    private void optimizeMessage(String originalText, String mode) {
+        BottomSheetDialog dialog = new BottomSheetDialog(requireContext());
+        View contentView = LayoutInflater.from(requireContext())
+                .inflate(R.layout.layout_ai_result_sheet, null, false);
+
+        TextView tvOriginalText = contentView.findViewById(R.id.tvOriginalText);
+        TextView tvOptimizedText = contentView.findViewById(R.id.tvOptimizedText);
+        TextView tvModeLabel = contentView.findViewById(R.id.tvModeLabel);
+        TextView btnClose = contentView.findViewById(R.id.btnCloseAiResult);
+        TextView btnCopy = contentView.findViewById(R.id.btnCopy);
+        TextView btnReplace = contentView.findViewById(R.id.btnReplace);
+
+        tvOriginalText.setText(originalText);
+        tvOptimizedText.setText("正在优化...");
+        tvModeLabel.setText(getModeLabel(mode));
+
+        btnClose.setOnClickListener(v -> dialog.dismiss());
+
+        btnCopy.setOnClickListener(v -> {
+            String optimized = tvOptimizedText.getText().toString();
+            copyToClipboard(optimized);
+            Toast.makeText(requireContext(), "已复制", Toast.LENGTH_SHORT).show();
+        });
+
+        btnReplace.setOnClickListener(v -> {
+            String optimized = tvOptimizedText.getText().toString();
+            etMessageInput.setText(optimized);
+            etMessageInput.setSelection(optimized.length());
+            etMessageInput.requestFocus();
+            dialog.dismiss();
+        });
+
+        dialog.setContentView(contentView);
+        dialog.show();
+
+        // Call AI API
+        AiApi.Impl.optimizeMessage(originalText, mode, new ApiCallback<AiApi.OptimizeMessageResponse>() {
+            @Override
+            public void onSuccess(AiApi.OptimizeMessageResponse data) {
+                if (!isAdded() || data == null) return;
+                tvOptimizedText.setText(data.optimizedText != null ? data.optimizedText : originalText);
+            }
+
+            @Override
+            public void onError(ApiError error) {
+                if (!isAdded()) return;
+                tvOptimizedText.setText(originalText);
+                Toast.makeText(requireContext(), "优化失败: " + error.message, Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private String getModeLabel(String mode) {
+        switch (mode) {
+            case "gentle": return "更温柔";
+            case "sincere": return "更真诚";
+            case "comfort": return "安慰一下";
+            default: return "AI 优化";
+        }
+    }
+
+    private void copyToClipboard(String text) {
+        android.content.ClipboardManager clipboard =
+                (android.content.ClipboardManager) requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+        android.content.ClipData clip = android.content.ClipData.newPlainText("AI 优化文本", text);
+        clipboard.setPrimaryClip(clip);
     }
 
     private void openImagePreview(String imageUri) {

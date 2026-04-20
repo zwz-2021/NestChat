@@ -16,9 +16,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingTop="2dp"
-        android:paddingBottom="12dp">
-
-    </FrameLayout>
+        android:paddingBottom="12dp" />
 
     <LinearLayout
         android:id="@+id/cardProfile"
@@ -66,7 +64,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="ID: 123456"
+                android:text="手机号: 13800138000"
                 android:textColor="@color/text_tertiary"
                 android:textSize="13sp" />
 
@@ -151,6 +149,7 @@
             android:paddingBottom="12dp">
 
             <ImageView
+                android:id="@+id/ivRelationAvatar"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:background="@drawable/bg_mine_partner_avatar"
@@ -170,7 +169,7 @@
                     android:id="@+id/tvRelationTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="已与小龙建立关系"
+                    android:text="当前未绑定关系"
                     android:textColor="@color/text_primary"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -180,11 +179,9 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="已相伴 32 天"
+                    android:text="输入对方手机号后发送绑定申请"
                     android:textColor="@color/text_secondary"
                     android:textSize="14sp" />
-
-
             </LinearLayout>
 
             <com.google.android.material.button.MaterialButton
@@ -196,7 +193,7 @@
                 android:minWidth="0dp"
                 android:paddingStart="14dp"
                 android:paddingEnd="14dp"
-                android:text="管理关系"
+                android:text="去绑定"
                 android:textAllCaps="false"
                 android:textColor="@color/white"
                 android:textSize="13sp"
@@ -269,7 +266,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="🤍"
+                android:text="🪴"
                 android:textSize="17sp" />
 
             <TextView
@@ -292,14 +289,48 @@
                 android:id="@+id/btnMoodHappy"
                 style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="0dp"
-                android:layout_height="58dp"
-                android:layout_marginEnd="5dp"
+                android:layout_height="52dp"
+                android:layout_marginEnd="4dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_mood_chip"
                 android:text="🙂 开心"
                 android:textAllCaps="false"
                 android:textColor="@color/text_secondary"
-                android:textSize="13sp"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                app:backgroundTint="@null"
+                app:strokeWidth="0dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnMoodCalm"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="4dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_mood_chip"
+                android:text="😌 平静"
+                android:textAllCaps="false"
+                android:textColor="@color/text_secondary"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                app:backgroundTint="@null"
+                app:strokeWidth="0dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnMoodLove"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="4dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_mood_chip"
+                android:text="🥰 心动"
+                android:textAllCaps="false"
+                android:textColor="@color/text_secondary"
+                android:textSize="10sp"
                 android:textStyle="bold"
                 app:backgroundTint="@null"
                 app:strokeWidth="0dp" />
@@ -308,15 +339,54 @@
                 android:id="@+id/btnMoodSad"
                 style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="0dp"
-                android:layout_height="58dp"
-                android:layout_marginStart="2dp"
-                android:layout_marginEnd="2dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="4dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_mood_chip"
                 android:text="😢 难过"
                 android:textAllCaps="false"
                 android:textColor="@color/text_secondary"
-                android:textSize="13sp"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                app:backgroundTint="@null"
+                app:strokeWidth="0dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnMoodWronged"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginEnd="4dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_mood_chip"
+                android:text="🥺 委屈"
+                android:textAllCaps="false"
+                android:textColor="@color/text_secondary"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                app:backgroundTint="@null"
+                app:strokeWidth="0dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnMoodAngry"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="4dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_mood_chip"
+                android:text="😤 生气"
+                android:textAllCaps="false"
+                android:textColor="@color/text_secondary"
+                android:textSize="10sp"
                 android:textStyle="bold"
                 app:backgroundTint="@null"
                 app:strokeWidth="0dp" />
@@ -325,14 +395,31 @@
                 android:id="@+id/btnMoodTired"
                 style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="0dp"
-                android:layout_height="58dp"
-                android:layout_marginStart="5dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="4dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_mood_chip"
                 android:text="😣 疲惫"
                 android:textAllCaps="false"
                 android:textColor="@color/text_secondary"
-                android:textSize="13sp"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                app:backgroundTint="@null"
+                app:strokeWidth="0dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnMoodAnxious"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_mood_chip"
+                android:text="😰 焦虑"
+                android:textAllCaps="false"
+                android:textColor="@color/text_secondary"
+                android:textSize="10sp"
                 android:textStyle="bold"
                 app:backgroundTint="@null"
                 app:strokeWidth="0dp" />

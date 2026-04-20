@@ -44,6 +44,11 @@ public interface ChatApi {
         public String partnerNickname;
         public String partnerAvatarUrl;
         public String subtitle;
+        public String partnerMoodCode;
+        public String partnerMoodText;
+        public String partnerLastActiveAt;
+        public boolean partnerTodayDiary;
+        public int companionDays;
     }
 
     class MessageListResponse {

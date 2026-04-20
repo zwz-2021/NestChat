@@ -6,6 +6,7 @@ import lombok.Data;
 public class RelationApplicationResponse {
 
     private String applicationId;
+    private String type;
     private String status;
     private String initiatorUserId;
     private String initiatorPhone;

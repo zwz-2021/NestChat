@@ -21,4 +21,5 @@ public class User {
     private String moodText;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private LocalDateTime lastActiveAt;
 }

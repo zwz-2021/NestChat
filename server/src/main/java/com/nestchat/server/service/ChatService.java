@@ -1,5 +1,6 @@
 package com.nestchat.server.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.nestchat.server.common.BusinessException;
 import com.nestchat.server.common.IdGenerator;
 import com.nestchat.server.common.ResultCode;
@@ -10,17 +11,23 @@ import com.nestchat.server.dto.response.ChatSessionResponse;
 import com.nestchat.server.dto.response.MessageListResponse;
 import com.nestchat.server.dto.response.MessageResponse;
 import com.nestchat.server.entity.Conversation;
+import com.nestchat.server.entity.Diary;
 import com.nestchat.server.entity.FileRecord;
 import com.nestchat.server.entity.Message;
+import com.nestchat.server.entity.Relation;
 import com.nestchat.server.entity.User;
 import com.nestchat.server.mapper.ConversationMapper;
+import com.nestchat.server.mapper.DiaryMapper;
 import com.nestchat.server.mapper.FileRecordMapper;
 import com.nestchat.server.mapper.MessageMapper;
+import com.nestchat.server.mapper.RelationMapper;
 import com.nestchat.server.mapper.UserMapper;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,18 +35,24 @@ import java.util.List;
 public class ChatService {
 
     private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy.MM.dd");
 
     private final ConversationMapper conversationMapper;
     private final MessageMapper messageMapper;
     private final UserMapper userMapper;
     private final FileRecordMapper fileRecordMapper;
+    private final RelationMapper relationMapper;
+    private final DiaryMapper diaryMapper;
 
     public ChatService(ConversationMapper conversationMapper, MessageMapper messageMapper,
-                       UserMapper userMapper, FileRecordMapper fileRecordMapper) {
+                       UserMapper userMapper, FileRecordMapper fileRecordMapper,
+                       RelationMapper relationMapper, DiaryMapper diaryMapper) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.userMapper = userMapper;
         this.fileRecordMapper = fileRecordMapper;
+        this.relationMapper = relationMapper;
+        this.diaryMapper = diaryMapper;
     }
 
     public ChatSessionResponse getCurrentSession(String userId) {
@@ -51,15 +64,44 @@ public class ChatService {
         String partnerId = conv.getUserIdA().equals(userId) ? conv.getUserIdB() : conv.getUserIdA();
         User partner = userMapper.selectById(partnerId);
 
+        // Get relation info for companion days
+        Relation relation = relationMapper.selectBoundByUserId(userId);
+        int companionDays = 0;
+        if (relation != null && relation.getBoundAt() != null) {
+            companionDays = (int) ChronoUnit.DAYS.between(relation.getBoundAt().toLocalDate(), LocalDate.now());
+        }
+
+        // Check if partner has diary today
+        boolean todayDiary = checkTodayDiary(partnerId);
+
         ChatSessionResponse resp = new ChatSessionResponse();
         resp.setConversationId(conv.getConversationId());
         resp.setPartnerUserId(partnerId);
+        resp.setCompanionDays(companionDays);
+        resp.setPartnerTodayDiary(todayDiary);
+
         if (partner != null) {
             resp.setPartnerNickname(partner.getNickname());
             resp.setPartnerAvatarUrl(partner.getAvatarUrl());
+            resp.setPartnerMoodCode(partner.getMoodCode());
+            resp.setPartnerMoodText(partner.getMoodText());
+            if (partner.getLastActiveAt() != null) {
+                resp.setPartnerLastActiveAt(formatDateTime(partner.getLastActiveAt()));
+            }
         }
         resp.setSubtitle("已绑定 · 在线");
         return resp;
+    }
+
+    private boolean checkTodayDiary(String userId) {
+        if (userId == null) return false;
+        String today = LocalDate.now().format(DATE_FMT);
+        Long count = diaryMapper.selectCount(
+                new LambdaQueryWrapper<Diary>()
+                        .eq(Diary::getUserId, userId)
+                        .eq(Diary::getDate, today)
+        );
+        return count != null && count > 0;
     }
 
     public MessageListResponse getMessages(String userId, String conversationId, String cursor, int pageSize) {
@@ -183,5 +225,9 @@ public class ChatService {
         resp.setClientMessageId(msg.getClientMessageId());
         resp.setSendStatus(msg.getSendStatus());
         return resp;
+    }
+
+    private String formatDateTime(LocalDateTime time) {
+        return time == null ? null : time.format(DT_FMT);
     }
 }

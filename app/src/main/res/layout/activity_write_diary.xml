@@ -188,13 +188,41 @@
                         android:gravity="center"
                         android:text="开心 🙂"
                         android:textColor="@color/text_primary"
-                        android:textSize="14sp" />
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/btnMoodCalm"
+                        android:layout_width="0dp"
+                        android:layout_height="46dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_mood_chip"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:text="平静 😌"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/btnMoodLove"
+                        android:layout_width="0dp"
+                        android:layout_height="46dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_mood_chip"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:text="心动 🥰"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
 
                     <TextView
                         android:id="@+id/btnMoodSad"
                         android:layout_width="0dp"
                         android:layout_height="46dp"
-                        android:layout_marginStart="10dp"
+                        android:layout_marginStart="8dp"
                         android:layout_weight="1"
                         android:background="@drawable/bg_mood_chip"
                         android:clickable="true"
@@ -202,13 +230,47 @@
                         android:gravity="center"
                         android:text="难过 😢"
                         android:textColor="@color/text_primary"
-                        android:textSize="14sp" />
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/btnMoodWronged"
+                        android:layout_width="0dp"
+                        android:layout_height="46dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_mood_chip"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:text="委屈 🥺"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/btnMoodAngry"
+                        android:layout_width="0dp"
+                        android:layout_height="46dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_mood_chip"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:text="生气 😤"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
 
                     <TextView
                         android:id="@+id/btnMoodTired"
                         android:layout_width="0dp"
                         android:layout_height="46dp"
-                        android:layout_marginStart="10dp"
+                        android:layout_marginStart="8dp"
                         android:layout_weight="1"
                         android:background="@drawable/bg_mood_chip"
                         android:clickable="true"
@@ -216,7 +278,21 @@
                         android:gravity="center"
                         android:text="疲惫 😣"
                         android:textColor="@color/text_primary"
-                        android:textSize="14sp" />
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/btnMoodAnxious"
+                        android:layout_width="0dp"
+                        android:layout_height="46dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_mood_chip"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:text="焦虑 😰"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
                 </LinearLayout>
 
                 <TextView

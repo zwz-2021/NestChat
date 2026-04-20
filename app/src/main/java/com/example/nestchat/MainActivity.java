@@ -79,6 +79,12 @@ public class MainActivity extends AppCompatActivity {
 
     private void switchFragment(Fragment fragment, String title) {
         titleView.setText(title);
+        // Hide title bar for chat fragment
+        if (fragment instanceof ChatFragment) {
+            findViewById(R.id.top_bar).setVisibility(View.GONE);
+        } else {
+            findViewById(R.id.top_bar).setVisibility(View.VISIBLE);
+        }
         getSupportFragmentManager()
                 .beginTransaction()
                 .replace(R.id.fragment_container, fragment)

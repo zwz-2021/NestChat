@@ -8,6 +8,7 @@ public interface UserApi {
     void getMineProfile(ApiCallback<ProfileResponse> callback);
     void updateProfile(UpdateProfileRequest request, ApiCallback<ProfileResponse> callback);
     void updateMood(UpdateMoodRequest request, ApiCallback<ProfileResponse> callback);
+    void heartbeat(ApiCallback<Void> callback);
 
     class ProfileResponse {
         public String userId;
@@ -39,6 +40,10 @@ public interface UserApi {
 
         public static void updateMood(UpdateMoodRequest request, ApiCallback<ProfileResponse> callback) {
             ApiClient.put("/users/me/mood", request, ProfileResponse.class, callback);
+        }
+
+        public static void heartbeat(ApiCallback<Void> callback) {
+            ApiClient.post("/users/me/heartbeat", null, Void.class, callback);
         }
     }
 }

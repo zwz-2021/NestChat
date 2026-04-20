@@ -37,6 +37,10 @@ public class TokenManager {
         return prefs.getString(KEY_ACCESS_TOKEN, "");
     }
 
+    public static String getRefreshToken() {
+        return prefs.getString(KEY_REFRESH_TOKEN, "");
+    }
+
     public static String getUserId() {
         return prefs.getString(KEY_USER_ID, "");
     }
@@ -51,6 +55,13 @@ public class TokenManager {
 
     public static String getAvatarUrl() {
         return prefs.getString(KEY_AVATAR_URL, "");
+    }
+
+    public static void updateProfile(String nickname, String avatarUrl) {
+        prefs.edit()
+                .putString(KEY_NICKNAME, nickname != null ? nickname : "")
+                .putString(KEY_AVATAR_URL, avatarUrl != null ? avatarUrl : "")
+                .apply();
     }
 
     public static boolean isLoggedIn() {

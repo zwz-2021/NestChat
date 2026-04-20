@@ -15,6 +15,7 @@ public class RelationApplication {
     private String applicationId;
     private String initiatorUserId;
     private String targetUserId;
+    private String type;
     private String status;
     private LocalDateTime createdAt;
 }

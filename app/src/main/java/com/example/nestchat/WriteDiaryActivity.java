@@ -53,8 +53,13 @@ public class WriteDiaryActivity extends AppCompatActivity {
     private TextView tvPreviewImageCount;
     private TextView tvPhotoPlaceholder;
     private TextView btnMoodHappy;
+    private TextView btnMoodCalm;
+    private TextView btnMoodLove;
     private TextView btnMoodSad;
+    private TextView btnMoodWronged;
+    private TextView btnMoodAngry;
     private TextView btnMoodTired;
+    private TextView btnMoodAnxious;
     private LinearLayout layoutSelectedPhotos;
     private MaterialButton btnTogglePhoto;
     private MaterialButton btnSave;
@@ -110,8 +115,13 @@ public class WriteDiaryActivity extends AppCompatActivity {
         tvPreviewImageCount = findViewById(R.id.tvPreviewImageCount);
         tvPhotoPlaceholder = findViewById(R.id.tvPhotoPlaceholder);
         btnMoodHappy = findViewById(R.id.btnMoodHappy);
+        btnMoodCalm = findViewById(R.id.btnMoodCalm);
+        btnMoodLove = findViewById(R.id.btnMoodLove);
         btnMoodSad = findViewById(R.id.btnMoodSad);
+        btnMoodWronged = findViewById(R.id.btnMoodWronged);
+        btnMoodAngry = findViewById(R.id.btnMoodAngry);
         btnMoodTired = findViewById(R.id.btnMoodTired);
+        btnMoodAnxious = findViewById(R.id.btnMoodAnxious);
         layoutSelectedPhotos = findViewById(R.id.layoutSelectedPhotos);
         btnTogglePhoto = findViewById(R.id.btnTogglePhoto);
         btnSave = findViewById(R.id.btnSaveDiary);
@@ -142,8 +152,13 @@ public class WriteDiaryActivity extends AppCompatActivity {
 
         ivBack.setOnClickListener(v -> finish());
         btnMoodHappy.setOnClickListener(v -> updateMoodSelection("开心", "happy", "🙂"));
+        btnMoodCalm.setOnClickListener(v -> updateMoodSelection("平静", "calm", "😌"));
+        btnMoodLove.setOnClickListener(v -> updateMoodSelection("心动", "love", "🥰"));
         btnMoodSad.setOnClickListener(v -> updateMoodSelection("难过", "sad", "😢"));
+        btnMoodWronged.setOnClickListener(v -> updateMoodSelection("委屈", "wronged", "🥺"));
+        btnMoodAngry.setOnClickListener(v -> updateMoodSelection("生气", "angry", "😤"));
         btnMoodTired.setOnClickListener(v -> updateMoodSelection("疲惫", "tired", "😣"));
+        btnMoodAnxious.setOnClickListener(v -> updateMoodSelection("焦虑", "anxious", "😰"));
         btnTogglePhoto.setOnClickListener(v -> handlePhotoAction());
         btnSave.setOnClickListener(v -> saveDiary());
     }
@@ -160,9 +175,14 @@ public class WriteDiaryActivity extends AppCompatActivity {
         selectedMoodCode = moodCode;
         selectedMoodEmoji = moodEmoji;
 
-        btnMoodHappy.setSelected("开心".equals(moodLabel));
-        btnMoodSad.setSelected("难过".equals(moodLabel));
-        btnMoodTired.setSelected("疲惫".equals(moodLabel));
+        btnMoodHappy.setSelected("happy".equals(moodCode));
+        btnMoodCalm.setSelected("calm".equals(moodCode));
+        btnMoodLove.setSelected("love".equals(moodCode));
+        btnMoodSad.setSelected("sad".equals(moodCode));
+        btnMoodWronged.setSelected("wronged".equals(moodCode));
+        btnMoodAngry.setSelected("angry".equals(moodCode));
+        btnMoodTired.setSelected("tired".equals(moodCode));
+        btnMoodAnxious.setSelected("anxious".equals(moodCode));
     }
 
     private void handlePhotoAction() {
@@ -304,7 +324,7 @@ public class WriteDiaryActivity extends AppCompatActivity {
         try {
             InputStream in = getContentResolver().openInputStream(uri);
             if (in == null) return null;
-            File temp = new File(getCacheDir(), "upload_" + System.currentTimeMillis() + ".jpg");
+            File temp = new File(getCacheDir(), buildTempFileName(uri));
             FileOutputStream out = new FileOutputStream(temp);
             byte[] buf = new byte[8192];
             int len;
@@ -317,6 +337,34 @@ public class WriteDiaryActivity extends AppCompatActivity {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private String buildTempFileName(Uri uri) {
+        String displayName = queryDisplayName(uri);
+        if (displayName == null || displayName.trim().isEmpty()) {
+            return "upload_" + System.currentTimeMillis() + ".jpg";
+        }
+        return "upload_" + System.currentTimeMillis() + "_" + displayName;
+    }
+
+    private String queryDisplayName(Uri uri) {
+        Cursor cursor = null;
+        try {
+            cursor = getContentResolver().query(uri, null, null, null, null);
+            if (cursor != null && cursor.moveToFirst()) {
+                int columnIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                if (columnIndex >= 0) {
+                    return cursor.getString(columnIndex);
+                }
+            }
+        } catch (Exception ignored) {
+            // Ignore and fall back to default temp filename.
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+        return null;
     }
 
     private String getTodayDate() {

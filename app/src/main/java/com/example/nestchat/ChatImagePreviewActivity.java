@@ -1,11 +1,12 @@
 package com.example.nestchat;
 
-import android.net.Uri;
 import android.os.Bundle;
 import android.widget.ImageView;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+
+import com.example.nestchat.util.AvatarImageLoader;
 
 public class ChatImagePreviewActivity extends AppCompatActivity {
 
@@ -22,7 +23,7 @@ public class ChatImagePreviewActivity extends AppCompatActivity {
 
         String imageUri = getIntent().getStringExtra(EXTRA_IMAGE_URI);
         if (imageUri != null && !imageUri.isEmpty()) {
-            ivPreview.setImageURI(Uri.parse(imageUri));
+            AvatarImageLoader.loadContent(ivPreview, imageUri);
         }
     }
 }

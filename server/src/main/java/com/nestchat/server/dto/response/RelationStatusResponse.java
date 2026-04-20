@@ -7,6 +7,10 @@ public class RelationStatusResponse {
 
     private String relationId;
     private String status;
+    private String pendingApplicationId;
+    private String pendingApplicationType;
+    private String pendingApplicationRole;
+    private String pendingApplicationCreatedAt;
     private String partnerUserId;
     private String partnerPhone;
     private String partnerNickname;

@@ -10,4 +10,9 @@ public class ChatSessionResponse {
     private String partnerNickname;
     private String partnerAvatarUrl;
     private String subtitle;
+    private String partnerMoodCode;
+    private String partnerMoodText;
+    private String partnerLastActiveAt;
+    private boolean partnerTodayDiary;
+    private int companionDays;
 }

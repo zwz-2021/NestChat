@@ -40,4 +40,10 @@ public class DiaryController {
     public Result<MoodTrendResponse> getPartnerMoodTrend(@RequestParam(defaultValue = "7") int days) {
         return Result.ok(diaryService.getPartnerMoodTrend(UserContext.get(), days));
     }
+
+    @DeleteMapping("/{diaryId}")
+    public Result<Void> deleteDiary(@PathVariable String diaryId) {
+        diaryService.deleteDiary(UserContext.get(), diaryId);
+        return Result.ok();
+    }
 }

@@ -15,10 +15,15 @@ import java.util.Map;
 @Service
 public class UserService {
 
-    private static final Map<String, String> MOOD_MAP = Map.of(
-            "happy", "开心",
-            "sad", "难过",
-            "tired", "疲惫"
+    private static final Map<String, String> MOOD_MAP = Map.ofEntries(
+            Map.entry("happy", "开心"),
+            Map.entry("calm", "平静"),
+            Map.entry("love", "心动"),
+            Map.entry("sad", "难过"),
+            Map.entry("wronged", "委屈"),
+            Map.entry("angry", "生气"),
+            Map.entry("tired", "疲惫"),
+            Map.entry("anxious", "焦虑")
     );
 
     private final UserMapper userMapper;
@@ -61,6 +66,14 @@ public class UserService {
         user.setUpdatedAt(LocalDateTime.now());
         userMapper.updateById(user);
         return toProfileResponse(user);
+    }
+
+    public void updateLastActive(String userId) {
+        User user = userMapper.selectById(userId);
+        if (user != null) {
+            user.setLastActiveAt(LocalDateTime.now());
+            userMapper.updateById(user);
+        }
     }
 
     private ProfileResponse toProfileResponse(User user) {

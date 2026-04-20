@@ -33,4 +33,10 @@ public class UserController {
     public Result<ProfileResponse> updateMood(@Valid @RequestBody UpdateMoodRequest req) {
         return Result.ok(userService.updateMood(UserContext.get(), req));
     }
+
+    @PostMapping("/me/heartbeat")
+    public Result<Void> heartbeat() {
+        userService.updateLastActive(UserContext.get());
+        return Result.ok();
+    }
 }

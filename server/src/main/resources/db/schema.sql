@@ -36,10 +36,11 @@ CREATE TABLE IF NOT EXISTS `relation_application` (
     `application_id`   VARCHAR(32) NOT NULL,
     `initiator_user_id` VARCHAR(32) NOT NULL,
     `target_user_id`   VARCHAR(32) NOT NULL,
+    `type`             VARCHAR(16) NOT NULL DEFAULT 'bind',
     `status`           VARCHAR(16) NOT NULL DEFAULT 'pending',
     `created_at`       DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`application_id`),
-    KEY `idx_target` (`target_user_id`, `status`)
+    KEY `idx_target` (`target_user_id`, `status`, `type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 日记表

@@ -15,6 +15,10 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 
 @Service
@@ -42,20 +46,17 @@ public class FileService {
         String ext = getExtension(originalName, "jpg");
         String mimeType = file.getContentType();
 
-        // 保存原图
         String relativePath = "image/" + bizType + "/" + fileId + "." + ext;
-        String fullPath = uploadBasePath + "/" + relativePath;
+        String fullPath = buildFullPath(relativePath);
         saveFile(file, fullPath);
 
-        // 生成缩略图
         String thumbRelativePath = "image/" + bizType + "/" + fileId + "_thumb." + ext;
-        String thumbFullPath = uploadBasePath + "/" + thumbRelativePath;
+        String thumbFullPath = buildFullPath(thumbRelativePath);
         generateThumbnail(fullPath, thumbFullPath, 200);
 
         String fileUrl = uploadBaseUrl + "/" + relativePath;
         String thumbnailUrl = uploadBaseUrl + "/" + thumbRelativePath;
 
-        // 保存记录
         FileRecord record = new FileRecord();
         record.setFileId(fileId);
         record.setUserId(userId);
@@ -89,7 +90,7 @@ public class FileService {
         String mimeType = file.getContentType();
 
         String relativePath = "voice/" + bizType + "/" + fileId + "." + ext;
-        String fullPath = uploadBasePath + "/" + relativePath;
+        String fullPath = buildFullPath(relativePath);
         saveFile(file, fullPath);
 
         String fileUrl = uploadBaseUrl + "/" + relativePath;
@@ -117,11 +118,14 @@ public class FileService {
     }
 
     private void saveFile(MultipartFile file, String path) {
-        File dest = new File(path);
-        dest.getParentFile().mkdirs();
         try {
-            file.transferTo(dest);
-        } catch (IOException e) {
+            Path destPath = Paths.get(path).toAbsolutePath().normalize();
+            Path parent = destPath.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            Files.copy(file.getInputStream(), destPath, StandardCopyOption.REPLACE_EXISTING);
+        } catch (Exception e) {
             throw new BusinessException(ResultCode.SERVER_ERROR, "文件保存失败");
         }
     }
@@ -144,11 +148,14 @@ public class FileService {
             g.dispose();
 
             File destFile = new File(destPath);
-            destFile.getParentFile().mkdirs();
+            File parentFile = destFile.getParentFile();
+            if (parentFile != null) {
+                parentFile.mkdirs();
+            }
             String ext = destPath.substring(destPath.lastIndexOf('.') + 1);
             ImageIO.write(thumb, ext, destFile);
         } catch (IOException e) {
-            // 缩略图生成失败不影响主流程
+            // 缩略图失败不影响主流程
         }
     }
 
@@ -157,5 +164,9 @@ public class FileService {
             return filename.substring(filename.lastIndexOf('.') + 1).toLowerCase();
         }
         return defaultExt;
+    }
+
+    private String buildFullPath(String relativePath) {
+        return Paths.get(uploadBasePath, relativePath.split("/")).toString();
     }
 }

@@ -55,9 +55,14 @@ public class RelationController {
         return Result.ok(relationService.updateRemark(UserContext.get(), req));
     }
 
+    @PostMapping("/current/unbind-request")
+    public Result<RelationStatusResponse> requestUnbind() {
+        return Result.ok(relationService.requestUnbind(UserContext.get()));
+    }
+
     @DeleteMapping("/current")
     public Result<Void> unbind() {
-        relationService.unbind(UserContext.get());
+        relationService.requestUnbind(UserContext.get());
         return Result.ok();
     }
 }

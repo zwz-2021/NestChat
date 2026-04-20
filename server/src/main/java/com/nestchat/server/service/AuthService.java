@@ -16,6 +16,7 @@ import com.nestchat.server.security.JwtUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -40,12 +41,16 @@ public class AuthService {
     private final UserMapper userMapper;
     private final JwtUtil jwtUtil;
     private final StringRedisTemplate redisTemplate;
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final BCryptPasswordEncoder passwordEncoder;
+    private final SmsService smsService;
 
-    public AuthService(UserMapper userMapper, JwtUtil jwtUtil, StringRedisTemplate redisTemplate) {
+    public AuthService(UserMapper userMapper, JwtUtil jwtUtil, StringRedisTemplate redisTemplate,
+                      @Autowired(required = false) SmsService smsService) {
         this.userMapper = userMapper;
         this.jwtUtil = jwtUtil;
         this.redisTemplate = redisTemplate;
+        this.smsService = smsService;
+        this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
     public CaptchaResponse generateCaptcha(String type) {
@@ -142,9 +147,15 @@ public class AuthService {
         String code = String.format("%06d", ThreadLocalRandom.current().nextInt(1000000));
         redisTemplate.opsForValue().set("reset_code:" + req.getAccount(), code, CAPTCHA_TTL_SECONDS, TimeUnit.SECONDS);
 
-        // 模拟短信发送，打印到日志
+        // 尝试发送短信
+        boolean smsSent = false;
+        if (smsService != null) {
+            smsSent = smsService.sendVerificationCode(req.getAccount(), code);
+        }
+
+        // 无论短信是否发送成功，都打印到日志
         log.info("========== 密码重置验证码 ==========");
-        log.info("账号: {}, 验证码: {}", req.getAccount(), code);
+        log.info("账号: {}, 验证码: {}, 短信发送: {}", req.getAccount(), code, smsSent ? "成功" : "失败（未配置或配置错误）");
         log.info("====================================");
     }
 

@@ -1,4 +1,4 @@
-package com.example.nestchat.Util;
+package com.example.nestchat.util;
 
 import android.content.Context;
 import android.graphics.Bitmap;

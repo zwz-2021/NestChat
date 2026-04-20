@@ -2,9 +2,6 @@ package com.example.nestchat.api;
 
 import java.util.List;
 
-/**
- * 关系管理接口。
- */
 public interface RelationApi {
 
     void getCurrentRelation(ApiCallback<RelationStatusResponse> callback);
@@ -13,7 +10,7 @@ public interface RelationApi {
     void acceptRelation(String applicationId, ApiCallback<RelationStatusResponse> callback);
     void rejectRelation(String applicationId, ApiCallback<RelationStatusResponse> callback);
     void updateRemark(UpdateRemarkRequest request, ApiCallback<RelationStatusResponse> callback);
-    void unbind(ApiCallback<SimpleResponse> callback);
+    void requestUnbind(ApiCallback<RelationStatusResponse> callback);
 
     class CreateBindRequest {
         public String targetPhone;
@@ -27,6 +24,10 @@ public interface RelationApi {
     class RelationStatusResponse {
         public String relationId;
         public String status;
+        public String pendingApplicationId;
+        public String pendingApplicationType;
+        public String pendingApplicationRole;
+        public String pendingApplicationCreatedAt;
         public String partnerUserId;
         public String partnerPhone;
         public String partnerNickname;
@@ -42,6 +43,7 @@ public interface RelationApi {
 
     class RelationApplication {
         public String applicationId;
+        public String type;
         public String status;
         public String initiatorUserId;
         public String initiatorPhone;
@@ -55,7 +57,6 @@ public interface RelationApi {
         public String message;
     }
 
-    // ========== 实现 ==========
     class Impl {
         public static void getCurrentRelation(ApiCallback<RelationStatusResponse> callback) {
             ApiClient.get("/relations/current", RelationStatusResponse.class, callback);
@@ -83,8 +84,8 @@ public interface RelationApi {
             ApiClient.put("/relations/current/remark", request, RelationStatusResponse.class, callback);
         }
 
-        public static void unbind(ApiCallback<SimpleResponse> callback) {
-            ApiClient.delete("/relations/current", SimpleResponse.class, callback);
+        public static void requestUnbind(ApiCallback<RelationStatusResponse> callback) {
+            ApiClient.post("/relations/current/unbind-request", null, RelationStatusResponse.class, callback);
         }
     }
 }
